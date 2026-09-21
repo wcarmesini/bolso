@@ -1,0 +1,7 @@
+# Quebra de linha LF em qualquer sistema (é como o Biome formata)
+* text=auto eol=lf
+
+# Binários nunca são convertidos
+*.woff2 binary
+*.png binary
+*.ico binary

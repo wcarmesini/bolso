@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790013468097,
+      "tag": "0000_aromatic_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790020903699,
+      "tag": "0001_cartao_parcelas_partes",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790020951606,
+      "tag": "0002_categoria_nas_partes",
+      "breakpoints": true
+    }
+  ]
+}

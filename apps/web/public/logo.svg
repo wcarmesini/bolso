@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <title>Bolso</title>
+  <!-- "b" geométrico numa grade 4×4 de quadrados de 26 (a partir de 38,38), branco sobre azul liso -->
+  <rect width="180" height="180" fill="#374DF5"/>
+  <path fill="#fff" fill-rule="evenodd" d="M38 38h26v26h78v78H38zM64 90v26h52V90z"/>
+</svg>
