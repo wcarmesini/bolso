@@ -30,26 +30,51 @@ const dias = (date: string, quantidade: number) => {
 
 export type Credenciais = { clientId: string; clientSecret: string }
 
-/** As credenciais do Pluggy que o grupo cadastrou em Ajustes → Integrações */
+/*
+ * As chaves de Pluggy do grupo. Costuma ser uma; um casal que divide o orçamento costuma ter
+ * duas, porque o plano pessoal da Pluggy só conecta contas do próprio titular — cada pessoa
+ * tem a sua, e cada conexão é buscada com a chave que a criou.
+ */
+export async function chavesDoGrupo(db: Database, groupId: string) {
+  return db
+    .select()
+    .from(integrationKeys)
+    .where(and(eq(integrationKeys.groupId, groupId), eq(integrationKeys.provider, 'pluggy')))
+    .orderBy(asc(integrationKeys.createdAt))
+}
+
+const abrir = (
+  chave: { clientId: string; secretCiphertext: string } | undefined,
+  encryptionKey: string,
+): Credenciais | null =>
+  chave?.clientId
+    ? {
+        clientId: chave.clientId,
+        clientSecret: decryptSecret(chave.secretCiphertext, encryptionKey),
+      }
+    : null
+
+/** A chave pedida, ou a primeira do grupo quando não se pediu nenhuma */
 export async function credenciaisDoGrupo(
   db: Database,
   encryptionKey: string,
   groupId: string,
+  integrationKeyId?: string | null,
 ): Promise<Credenciais | null> {
-  const [chave] = await db
-    .select()
-    .from(integrationKeys)
-    .where(and(eq(integrationKeys.groupId, groupId), eq(integrationKeys.provider, 'pluggy')))
-    .limit(1)
-  if (!chave?.clientId) return null
-  return {
-    clientId: chave.clientId,
-    clientSecret: decryptSecret(chave.secretCiphertext, encryptionKey),
-  }
+  const chaves = await chavesDoGrupo(db, groupId)
+  const escolhida = integrationKeyId
+    ? chaves.find((chave) => chave.id === integrationKeyId)
+    : chaves[0]
+  return abrir(escolhida, encryptionKey)
 }
 
-export async function exigirCredenciais(db: Database, encryptionKey: string, groupId: string) {
-  const credenciais = await credenciaisDoGrupo(db, encryptionKey, groupId)
+export async function exigirCredenciais(
+  db: Database,
+  encryptionKey: string,
+  groupId: string,
+  integrationKeyId?: string | null,
+) {
+  const credenciais = await credenciaisDoGrupo(db, encryptionKey, groupId, integrationKeyId)
   if (!credenciais) {
     throw new HttpError(
       400,
@@ -206,10 +231,16 @@ export function iniciarBuscaAutomatica(deps: Deps) {
       }
 
       for (const [groupId, doGrupo] of porGrupo) {
-        const credenciais = await credenciaisDoGrupo(db, env.ENCRYPTION_KEY, groupId)
-        if (!credenciais) continue
         let novidades = 0
         for (const conexao of doGrupo) {
+          // Cada conexão com a chave que a criou: a do outro não enxerga a conta desta
+          const credenciais = await credenciaisDoGrupo(
+            db,
+            env.ENCRYPTION_KEY,
+            groupId,
+            conexao.integrationKeyId,
+          )
+          if (!credenciais) continue
           try {
             novidades += await sincronizar(db, credenciais, conexao)
           } catch (error) {

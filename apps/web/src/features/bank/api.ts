@@ -9,7 +9,14 @@ import type {
 } from '@bolso/shared'
 import { api } from '@/lib/api-client'
 
-export type BankState = { configured: boolean; connections: BankConnection[] }
+/** As chaves de Pluggy do grupo: uma por pessoa, quando o casal usa o plano pessoal */
+export type BankKey = { id: string; label: string }
+
+export type BankState = {
+  configured: boolean
+  keys: BankKey[]
+  connections: BankConnection[]
+}
 
 /** As conexões do grupo e se já dá para conectar um banco (chave do Pluggy cadastrada) */
 export function getBank() {
@@ -20,15 +27,16 @@ export function getBank() {
  * Token do widget. Vale meia hora e só serve para abrir a tela de conexão — o segredo do
  * Pluggy fica no servidor. Com `itemId`, abre no modo "arrumar esta conexão".
  */
-export function createConnectToken(itemId?: string) {
+export function createConnectToken(itemId?: string, integrationKeyId?: string) {
   return api<{ accessToken: string }>('/bank/connect-token', {
     method: 'POST',
-    body: itemId ? { itemId } : {},
+    body: { ...(itemId ? { itemId } : {}), ...(integrationKeyId ? { integrationKeyId } : {}) },
   })
 }
 
-export function getBankItem(itemId: string) {
-  return api<BankItemInfo>(`/bank/items/${itemId}`)
+export function getBankItem(itemId: string, integrationKeyId?: string) {
+  const busca = integrationKeyId ? `?integrationKeyId=${integrationKeyId}` : ''
+  return api<BankItemInfo>(`/bank/items/${itemId}${busca}`)
 }
 
 export function linkBankAccounts(values: BankLinkValues) {

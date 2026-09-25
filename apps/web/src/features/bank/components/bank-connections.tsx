@@ -6,7 +6,15 @@ import {
   needsAttention,
 } from '@bolso/shared'
 import { Link } from '@tanstack/react-router'
-import { Building2, CalendarClock, Inbox, Landmark, RefreshCw, Wrench } from 'lucide-react'
+import {
+  Building2,
+  CalendarClock,
+  ChevronDown,
+  Inbox,
+  Landmark,
+  RefreshCw,
+  Wrench,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog'
@@ -22,6 +30,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { shortDate } from '@/lib/dates'
 import { errorMessage } from '@/lib/errors'
 import { createConnectToken, getBankItem } from '../api'
@@ -59,11 +75,14 @@ export function BankConnections() {
 
   const [abrindo, setAbrindo] = useState(false)
   const [item, setItem] = useState<BankItemInfo | null>(null)
+  /** Com qual chave a conexão que está nascendo vai ser buscada */
+  const [chaveEmUso, setChaveEmUso] = useState<string | undefined>()
   const [removendo, setRemovendo] = useState<BankConnection | null>(null)
   const [editando, setEditando] = useState<BankConnection | null>(null)
   const [novoInicio, setNovoInicio] = useState('')
 
   const conexoes = data?.connections ?? []
+  const chaves = data?.keys ?? []
   const esperando = conexoes.reduce((total, conexao) => total + conexao.pendingCount, 0)
 
   /*
@@ -71,16 +90,18 @@ export function BankConnections() {
    * Quando ele fecha, perguntamos ao Pluggy o que aquela conexão tem dentro — o banco pode
    * ainda estar respondendo, e é isso que a tela de ligar as contas mostra.
    */
-  const conectar = async (conexao?: BankConnection) => {
+  const conectar = async (conexao?: BankConnection, chaveId?: string) => {
+    const chave = conexao?.integrationKeyId ?? chaveId ?? chaves[0]?.id
+    setChaveEmUso(chave)
     setAbrindo(true)
     try {
-      const { accessToken } = await createConnectToken(conexao?.itemId)
+      const { accessToken } = await createConnectToken(conexao?.itemId, chave)
       await abrirPluggy({
         connectToken: accessToken,
         updateItem: conexao?.itemId,
         onSuccess: async ({ item: conectado }) => {
           try {
-            const info = await getBankItem(conectado.id)
+            const info = await getBankItem(conectado.id, chave)
             if (conexao) {
               toast.success('Conexão atualizada')
               await sincronizar.mutateAsync(conexao.id)
@@ -133,15 +154,41 @@ export function BankConnections() {
             O Bolso busca sozinho de tempos em tempos. O que chega fica esperando sua aprovação.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => conectar()}
-          disabled={abrindo || semChave}
-        >
-          <Landmark />
-          {abrindo ? 'Abrindo…' : 'Conectar banco'}
-        </Button>
+        {chaves.length > 1 ? (
+          /*
+           * Mais de uma chave: a conexão precisa nascer da pessoa certa. No plano pessoal da
+           * Pluggy cada chave só enxerga as contas do próprio titular, então conectar o banco
+           * da Débora com a chave do Wilson simplesmente não funciona.
+           */
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" size="sm" disabled={abrindo} />}>
+              <Landmark />
+              {abrindo ? 'Abrindo…' : 'Conectar banco'}
+              <ChevronDown className="opacity-70" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {/* O título fica dentro do grupo: fora dele, o Base UI não acha o contexto */}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Com a chave de</DropdownMenuLabel>
+                {chaves.map((chave) => (
+                  <DropdownMenuItem key={chave.id} onClick={() => conectar(undefined, chave.id)}>
+                    {chave.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => conectar()}
+            disabled={abrindo || semChave}
+          >
+            <Landmark />
+            {abrindo ? 'Abrindo…' : 'Conectar banco'}
+          </Button>
+        )}
       </div>
 
       {/* A chave saiu, mas as conexões continuam aqui: some a busca, não o que já foi ligado */}
@@ -238,7 +285,11 @@ export function BankConnections() {
         </ul>
       )}
 
-      <LinkAccountsDialog item={item} onOpenChange={(open) => !open && setItem(null)} />
+      <LinkAccountsDialog
+        item={item}
+        integrationKeyId={chaveEmUso}
+        onOpenChange={(open) => !open && setItem(null)}
+      />
 
       <Dialog open={editando !== null} onOpenChange={(open) => !open && setEditando(null)}>
         <DialogContent className="sm:max-w-sm">

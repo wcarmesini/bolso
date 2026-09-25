@@ -158,6 +158,15 @@ export const bankConnections = pgTable(
     groupId: groupId(),
     /** Conexão lá no Pluggy (item) */
     itemId: text('item_id').notNull(),
+    /*
+     * Com qual chave do Pluggy esta conexão nasceu. Um grupo pode ter mais de uma: no plano
+     * pessoal da Pluggy, cada pessoa só conecta as contas do próprio CPF, então um casal que
+     * divide o orçamento tem uma chave de cada lado — e cada conexão tem de ser buscada com
+     * a chave que a criou.
+     */
+    integrationKeyId: uuid('integration_key_id').references(() => integrationKeys.id, {
+      onDelete: 'set null',
+    }),
     connectorName: text('connector_name').notNull().default(''),
     connectorImageUrl: text('connector_image_url'),
     status: text('status').notNull().default('UPDATING'),

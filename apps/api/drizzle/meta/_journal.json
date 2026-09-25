@@ -127,6 +127,13 @@
       "when": 1790353890260,
       "tag": "0017_rascunho_da_decisao",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790354950232,
+      "tag": "0018_uma_chave_por_conexao",
+      "breakpoints": true
     }
   ]
 }

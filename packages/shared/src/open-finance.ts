@@ -48,6 +48,8 @@ export type BankConnection = {
   /** Conta do Bolso que recebe os lançamentos */
   accountId: string
   accountName: string
+  /** De quem é a chave do Pluggy que busca esta conexão */
+  integrationKeyId: string | null
   /** Conta lá no banco */
   externalAccountId: string
   externalAccountName: string
@@ -82,6 +84,8 @@ export type BankItemInfo = {
 
 export const bankLinkSchema = z.object({
   itemId: z.string().min(1, 'Conexão não informada').max(80),
+  /** Com qual chave do Pluggy esta conexão nasceu (um casal costuma ter uma de cada) */
+  integrationKeyId: z.uuid().optional(),
   links: z
     .array(
       z.object({

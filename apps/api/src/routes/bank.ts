@@ -15,7 +15,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { accounts, bankConnections, pendingTransactions } from '../db/schema'
 import { type AppEnv, type Deps, HttpError, notFound, notify, onInvalid } from '../http'
-import { credenciaisDoGrupo, exigirCredenciais, sincronizar } from '../lib/bank-sync'
+import { chavesDoGrupo, exigirCredenciais, sincronizar } from '../lib/bank-sync'
 import {
   agruparConciliacoes,
   conciliarDividindo,
@@ -76,6 +76,7 @@ export function bankRoutes(deps: Deps) {
       statusMessage: conexao.statusMessage,
       accountId: conexao.accountId,
       accountName,
+      integrationKeyId: conexao.integrationKeyId,
       externalAccountId: conexao.externalAccountId,
       externalAccountName: conexao.externalAccountName,
       startDate: conexao.startDate,
@@ -89,9 +90,17 @@ export function bankRoutes(deps: Deps) {
     new Hono<AppEnv>()
       // Estado geral: dá para conectar um banco? quais já estão ligados?
       .get('/', async (c) => {
-        const credenciais = await credenciaisDoGrupo(db, env.ENCRYPTION_KEY, c.var.groupId)
+        const chaves = await chavesDoGrupo(db, c.var.groupId)
         return c.json({
-          configured: credenciais !== null,
+          configured: chaves.some((chave) => chave.clientId),
+          /*
+           * De quem é cada chave. No plano pessoal da Pluggy só dá para conectar contas do
+           * próprio titular, então um casal tem uma chave de cada lado — e a tela precisa
+           * perguntar com qual delas a nova conexão vai nascer.
+           */
+          keys: chaves
+            .filter((chave) => chave.clientId)
+            .map((chave) => ({ id: chave.id, label: chave.label || 'Pluggy' })),
           connections: await listar(c.var.groupId),
         })
       })
@@ -102,9 +111,21 @@ export function bankRoutes(deps: Deps) {
        */
       .post(
         '/connect-token',
-        zValidator('json', z.object({ itemId: z.string().max(80).optional() }), onInvalid),
+        zValidator(
+          'json',
+          z.object({
+            itemId: z.string().max(80).optional(),
+            integrationKeyId: z.uuid().optional(),
+          }),
+          onInvalid,
+        ),
         async (c) => {
-          const credenciais = await exigirCredenciais(db, env.ENCRYPTION_KEY, c.var.groupId)
+          const credenciais = await exigirCredenciais(
+            db,
+            env.ENCRYPTION_KEY,
+            c.var.groupId,
+            c.req.valid('json').integrationKeyId,
+          )
           const accessToken = await connectToken(credenciais, c.req.valid('json').itemId)
           return c.json({ accessToken })
         },
@@ -112,7 +133,12 @@ export function bankRoutes(deps: Deps) {
 
       // Assim que o widget fecha: o que essa conexão tem dentro, para ligar às contas do Bolso
       .get('/items/:itemId', async (c) => {
-        const credenciais = await exigirCredenciais(db, env.ENCRYPTION_KEY, c.var.groupId)
+        const credenciais = await exigirCredenciais(
+          db,
+          env.ENCRYPTION_KEY,
+          c.var.groupId,
+          c.req.query('integrationKeyId'),
+        )
         const itemId = c.req.param('itemId')
         const item = await buscarItem(credenciais, itemId)
         const contas = await buscarContas(credenciais, itemId)
@@ -132,8 +158,13 @@ export function bankRoutes(deps: Deps) {
       // Liga contas do banco a contas do Bolso e já traz a primeira leva para aprovação
       .post('/connections', zValidator('json', bankLinkSchema, onInvalid), async (c) => {
         const groupId = c.var.groupId
-        const credenciais = await exigirCredenciais(db, env.ENCRYPTION_KEY, groupId)
-        const { itemId, links } = c.req.valid('json')
+        const { itemId, links, integrationKeyId } = c.req.valid('json')
+        const credenciais = await exigirCredenciais(
+          db,
+          env.ENCRYPTION_KEY,
+          groupId,
+          integrationKeyId,
+        )
         const item = await buscarItem(credenciais, itemId)
         const contas = await buscarContas(credenciais, itemId)
 
@@ -170,6 +201,7 @@ export function bankRoutes(deps: Deps) {
               externalAccountId: conta.id,
               externalAccountName: [conta.name, conta.number].filter(Boolean).join(' · '),
               startDate: link.startDate,
+              integrationKeyId: integrationKeyId ?? null,
               createdBy: c.var.user.id,
             })
             .onConflictDoNothing()
@@ -219,8 +251,14 @@ export function bankRoutes(deps: Deps) {
 
       // "Atualizar agora": a mesma busca que roda sozinha, só que na hora
       .post('/connections/:id/sync', async (c) => {
-        const credenciais = await exigirCredenciais(db, env.ENCRYPTION_KEY, c.var.groupId)
         const conexao = await daConexao(c.var.groupId, c.req.param('id'))
+        // A chave que criou a conexão: a do outro titular não enxerga esta conta
+        const credenciais = await exigirCredenciais(
+          db,
+          env.ENCRYPTION_KEY,
+          c.var.groupId,
+          conexao.integrationKeyId,
+        )
         await sincronizar(db, credenciais, conexao)
         notify(deps, c, 'bank')
         return c.json(await listar(c.var.groupId))

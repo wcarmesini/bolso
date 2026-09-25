@@ -282,6 +282,12 @@ esperando. Aprovar cria o lançamento, conciliar gruda no que já existia, e dis
 nos três casos a linha fica marcada no banco de dados, e é isso que impede a busca seguinte de
 trazer tudo de novo.
 
+**Uma chave por pessoa.** No plano pessoal da Pluggy (o "Meu Pluggy", gratuito), cada chave só
+conecta contas **do próprio titular** — um casal que divide o orçamento precisa de uma chave de
+cada lado. Por isso cada conexão guarda com qual chave nasceu, e é com ela que a busca
+acontece: a chave de um não enxerga a conta do outro. Com mais de uma cadastrada, o botão
+"Conectar banco" pergunta de quem é a chave, usando o apelido dela.
+
 Duas regras do lado do servidor: o **Client Secret nunca sai dele** (o navegador recebe apenas
 um `connectToken` de 30 minutos), e cada busca reconfere os **últimos 7 dias** além do que
 ainda não viu, porque banco mexe no que mandou há pouco (muda a descrição, ajusta o valor de

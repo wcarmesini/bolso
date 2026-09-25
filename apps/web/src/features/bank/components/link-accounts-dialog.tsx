@@ -37,6 +37,8 @@ type Escolha = { accountId: string | null; startDate: string }
 
 type LinkAccountsDialogProps = {
   item: BankItemInfo | null
+  /** A chave do Pluggy que abriu esta conexão: é com ela que ela será buscada depois */
+  integrationKeyId?: string
   onOpenChange: (open: boolean) => void
 }
 
@@ -46,7 +48,11 @@ type LinkAccountsDialogProps = {
  * A data de início é o que impede a caixa de entrada de nascer com dois anos de extrato para
  * aprovar. Nada antes dela é buscado — nem agora, nem nas buscas seguintes.
  */
-export function LinkAccountsDialog({ item, onOpenChange }: LinkAccountsDialogProps) {
+export function LinkAccountsDialog({
+  item,
+  integrationKeyId,
+  onOpenChange,
+}: LinkAccountsDialogProps) {
   const { data: accounts = [] } = useAccounts()
   const ligar = useLinkBankAccounts()
   const [escolhas, setEscolhas] = useState<Record<string, Escolha>>({})
@@ -69,6 +75,7 @@ export function LinkAccountsDialog({ item, onOpenChange }: LinkAccountsDialogPro
     try {
       await ligar.mutateAsync({
         itemId: item.itemId,
+        integrationKeyId,
         links: prontas.map((conta) => ({
           externalAccountId: conta.id,
           accountId: escolhas[conta.id]?.accountId as string,

@@ -1,6 +1,7 @@
 import type {
   Account,
   ApiKey,
+  BankConnection,
   CreatedApiKey,
   ImportBatch,
   ImportPreview,
@@ -625,6 +626,47 @@ describe('rascunho da classificação', () => {
     expect(resposta.status).toBe(204)
     const fila = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
     expect(fila.body.rows.some((row) => row.fitId === linha?.id)).toBe(false)
+  })
+})
+
+describe('mais de uma chave do Pluggy', () => {
+  it('cada conexão guarda a chave que a criou', async () => {
+    const chave = async (label: string, clientId: string) =>
+      ana.json<{ id: string }>('/api/integration-keys', {
+        method: 'POST',
+        body: JSON.stringify({
+          provider: 'pluggy',
+          customProvider: '',
+          label,
+          clientId,
+          secret: `segredo-${clientId}`,
+        }),
+      })
+    const doWilson = await chave('Wilson', 'cliente-wilson')
+    const daDebora = await chave('Débora', 'cliente-debora')
+    expect(daDebora.status).toBe(201)
+
+    const estado = await ana.json<{ configured: boolean; keys: { id: string; label: string }[] }>(
+      '/api/bank',
+    )
+    expect(estado.body.configured).toBe(true)
+    expect(estado.body.keys.map((k) => k.label).sort()).toEqual(['Débora', 'Wilson'])
+
+    /*
+     * A conexão que já existia foi criada antes de haver duas chaves: continua funcionando,
+     * e a busca dela usa a primeira chave do grupo até alguém reconectar.
+     */
+    await api.db
+      .update(bankConnections)
+      .set({ integrationKeyId: daDebora.body.id })
+      .where(eq(bankConnections.id, conexaoId))
+
+    const lista = await ana.json<BankConnection[]>('/api/bank')
+    const daFila = (lista.body as unknown as { connections: BankConnection[] }).connections.find(
+      (item) => item.id === conexaoId,
+    )
+    expect(daFila?.integrationKeyId).toBe(daDebora.body.id)
+    expect(doWilson.body.id).not.toBe(daDebora.body.id)
   })
 })
 
