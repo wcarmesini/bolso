@@ -212,8 +212,10 @@ export function MonthlyDetailDialog({ target, onOpenChange }: MonthlyDetailDialo
       </Dialog>
 
       {/*
-       * Irmão, não aninhado: aninhado, o Base UI esconde o de baixo, e a lista sumiria
-       * atrás. Assim os dois ficam na tela, e fechar o de cima devolve o detalhamento.
+       * Irmão, não aninhado: aninhado, o Base UI esconde o de baixo. Os dois ficam na mesma
+       * camada — o de editar cobre a lista, e fechá-lo devolve o detalhamento como estava.
+       * Subir a camada deste seria pior: os seletores (contato, categoria, conta) abrem em
+       * z-50 e passariam a aparecer **atrás** do formulário.
        */}
       <TransactionFormDialog
         open={editando !== null}
@@ -222,7 +224,6 @@ export function MonthlyDetailDialog({ target, onOpenChange }: MonthlyDetailDialo
         }}
         transaction={editando}
         month={(editando?.purchaseDate ?? '').slice(0, 7)}
-        stacked
       />
     </>
   )

@@ -245,6 +245,10 @@ export function bankRoutes(deps: Deps) {
           amountCents: row.amountCents,
           description: row.description,
           kind: row.kind,
+          installment:
+            row.installmentNumber && row.installmentCount
+              ? { number: row.installmentNumber, count: row.installmentCount }
+              : null,
         }))
         const existentes = await carregarExistentes(db, groupId, conexao.accountId, linhas)
         const nomes = await categoriasDe(

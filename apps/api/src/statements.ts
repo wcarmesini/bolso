@@ -1,4 +1,11 @@
-import { type CardCycle, cardCycleOf, statementFor } from '@bolso/shared'
+import {
+  addMonthsToDate,
+  addMonthsToMonth,
+  type CardCycle,
+  cardCycleOf,
+  statementDates,
+  statementFor,
+} from '@bolso/shared'
 import { and, eq, gte, isNull, or } from 'drizzle-orm'
 import type { Database } from './db/client'
 import { accounts, transactions } from './db/schema'
@@ -22,15 +29,29 @@ export async function accountCycle(db: Database, groupId: string, accountId: str
 /**
  * Onde a compra entra no caixa. No cartão, é o vencimento da fatura em que ela caiu;
  * fora do cartão, vale a data de pagamento informada.
+ *
+ * `installmentIndex` adianta o caixa sem mexer na competência: numa compra em 10x, as dez
+ * parcelas são da **data da compra** (é ali que o gasto aconteceu), mas cada uma cai numa
+ * fatura diferente — a 1ª na fatura da compra, a 2ª na seguinte, e assim por diante.
  */
 export function cashFields(
   purchaseDate: string,
   paymentDate: string | null,
   cycle: CardCycle | null,
+  installmentIndex = 0,
 ) {
-  if (!cycle) return { statementMonth: null, paymentDate }
-  const statement = statementFor(purchaseDate, cycle)
-  return { statementMonth: statement.month, paymentDate: statement.dueDate }
+  if (!cycle) {
+    return {
+      statementMonth: null,
+      paymentDate: paymentDate ? addMonthsToDate(paymentDate, installmentIndex) : null,
+    }
+  }
+  const primeira = statementFor(purchaseDate, cycle)
+  if (installmentIndex === 0) {
+    return { statementMonth: primeira.month, paymentDate: primeira.dueDate }
+  }
+  const month = addMonthsToMonth(primeira.month, installmentIndex)
+  return { statementMonth: month, paymentDate: statementDates(month, cycle).dueDate }
 }
 
 /**

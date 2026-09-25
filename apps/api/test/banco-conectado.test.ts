@@ -339,6 +339,96 @@ describe('cartão de crédito conectado', () => {
   })
 })
 
+describe('parcela que vem do banco', () => {
+  it('as 10 parcelas são da data da compra e viram uma série só', async () => {
+    const me = await ana.json<{ user: { id: string } }>('/api/me')
+    const cartao = await ana.json<Account>('/api/accounts', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Cartão parcelado',
+        type: 'credit_card',
+        initialBalanceCents: 0,
+        closingDay: 5,
+        dueDay: 15,
+        limitCents: 900000,
+      }),
+    })
+    const [conexao] = await api.db
+      .insert(bankConnections)
+      .values({
+        groupId,
+        itemId: 'item-parcela',
+        connectorName: 'Banco de Teste',
+        status: 'UPDATED',
+        accountId: cartao.body.id,
+        externalAccountId: 'cartao-parcela',
+        externalAccountName: 'Cartão 9999',
+        startDate: '2026-07-01',
+        createdBy: me.body.user.id,
+      })
+      .returning()
+
+    /*
+     * A compra foi em 14/08; a parcela 2 caiu na fatura de setembro. O banco manda o número
+     * da parcela e a data da compra — as duas parcelas têm de acabar na mesma série e com a
+     * mesma competência.
+     */
+    const parcela = (numero: number, quando: string) => ({
+      groupId,
+      connectionId: conexao?.id as string,
+      accountId: cartao.body.id,
+      externalId: `imuno-${numero}`,
+      date: quando,
+      amountCents: -12000,
+      description: 'IMUNO SAO JOSE BR',
+      kind: 'Saúde',
+      installmentNumber: numero,
+      installmentCount: 10,
+      purchaseDate: '2026-08-14',
+      merchant: 'Imuno',
+    })
+    await api.db
+      .insert(pendingTransactions)
+      .values([parcela(1, '2026-08-14'), parcela(2, '2026-09-14')])
+
+    const fila = await ana.json<ImportPreview>(`/api/bank/connections/${conexao?.id}/pending`)
+    const aprovar = await ana.json<{ created: number }>(
+      `/api/bank/connections/${conexao?.id}/approve`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          decisions: fila.body.rows.map((row) => ({
+            fitId: row.fitId,
+            action: 'create',
+            categoryId: mercado,
+            contactId: null,
+          })),
+        }),
+      },
+    )
+    expect(aprovar.body.created).toBe(2)
+
+    const lancamentos = await ana.json<Transaction[]>(
+      '/api/transactions?from=2026-08-01&to=2026-08-31',
+    )
+    const parcelas = lancamentos.body.filter((item) => item.description === 'IMUNO SAO JOSE BR')
+
+    // As duas pesam no mês da compra, não no mês em que caíram na fatura
+    expect(parcelas).toHaveLength(2)
+    expect(parcelas.map((item) => item.purchaseDate)).toEqual(['2026-08-14', '2026-08-14'])
+
+    // Mesma série, números certos, e cada uma na sua fatura
+    const series = new Set(parcelas.map((item) => item.installment?.groupId))
+    expect(series.size).toBe(1)
+    expect(parcelas.map((item) => item.installment?.number).sort()).toEqual([1, 2])
+    expect(parcelas.map((item) => item.installment?.count)).toEqual([10, 10])
+    expect([...new Set(parcelas.map((item) => item.statementMonth))].sort()).toEqual([
+      '2026-09',
+      '2026-10',
+    ])
+  })
+})
+
 describe('histórico de importações', () => {
   it('registra cada aprovação e sabe voltar atrás', async () => {
     // Um lançamento que já existia, para conciliar, e uma linha nova, para criar

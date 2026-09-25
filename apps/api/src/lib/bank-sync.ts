@@ -137,6 +137,11 @@ export async function sincronizar(
             amountCents: item.amountCents,
             description: item.description,
             kind: item.kind,
+            installmentNumber: item.installment?.number ?? null,
+            installmentCount: item.installment?.count ?? null,
+            purchaseDate: item.installment?.purchaseDate ?? null,
+            merchant: item.merchant,
+            raw: item.raw,
           })),
         )
         .onConflictDoNothing()

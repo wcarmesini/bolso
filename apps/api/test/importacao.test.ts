@@ -51,7 +51,7 @@ describe('leitor de OFX', () => {
     expect(statement.accountNumber).toBe('12345-6')
     expect(statement.bankNumber).toBe('001')
     expect(statement.start).toBe('2026-09-01')
-    expect(statement.transactions).toEqual([
+    expect(statement.transactions).toMatchObject([
       {
         fitId: 'X1',
         date: '2026-09-05',
@@ -75,7 +75,7 @@ describe('leitor de OFX', () => {
       <FITID>A1</FITID><NAME>PADARIA &amp; CIA</NAME></STMTTRN>
     </BANKTRANLIST></OFX>`
     const statement = parseOfx(xml)
-    expect(statement.transactions[0]).toEqual({
+    expect(statement.transactions[0]).toMatchObject({
       fitId: 'A1',
       date: '2026-09-05',
       amountCents: -1234,
@@ -202,7 +202,7 @@ describe('importar e conciliar', () => {
   it('marca como novo o que não existe e importa com categoria', async () => {
     const arquivo = extrato(lancamentoOfx('N1', '20260903', '-45.90', 'FARMACIA CENTRAL'))
     const lido = await preview(arquivo)
-    expect(lido.body.rows).toEqual([
+    expect(lido.body.rows).toMatchObject([
       {
         fitId: 'N1',
         date: '2026-09-03',

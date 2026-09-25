@@ -33,6 +33,16 @@ import { accountCycle } from '../statements'
  * conectado (`lib/reconcile.ts`).
  */
 
+/** "2026-09-14" menos 1 mês → "2026-08-14" (encolhe para o último dia quando o dia não existe) */
+function mesesAtras(date: string, quantos: number) {
+  if (quantos <= 0) return date
+  const [ano, mes, dia] = date.split('-').map(Number)
+  const base = new Date(Date.UTC(ano ?? 1970, (mes ?? 1) - 1 - quantos, 1))
+  const ultimo = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0)).getUTCDate()
+  base.setUTCDate(Math.min(dia ?? 1, ultimo))
+  return base.toISOString().slice(0, 10)
+}
+
 function lerArquivo(text: string): OfxStatement {
   try {
     return parseOfx(text)
@@ -198,7 +208,14 @@ export function importsRoutes(deps: Deps) {
             const transactionId = await criarLancamento(
               tx,
               contexto,
-              { ...item, externalId: item.fitId },
+              {
+                ...item,
+                externalId: item.fitId,
+                installmentNumber: item.parcela?.number ?? null,
+                installmentCount: item.parcela?.count ?? null,
+                // O OFX não diz quando a compra foi feita: só dá para contar para trás
+                purchaseDate: item.parcela ? mesesAtras(item.date, item.parcela.number - 1) : null,
+              },
               decision.categoryId,
               decision.contactId,
             )

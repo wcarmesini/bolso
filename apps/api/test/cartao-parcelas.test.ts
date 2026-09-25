@@ -190,22 +190,31 @@ describe('parcelado', () => {
     const serie = primeira.body.installment
     expect(serie).toMatchObject({ number: 1, count: 3 })
 
-    const todas: Transaction[] = []
-    for (const month of ['2026-09', '2026-10', '2026-11']) {
-      const lista = await ana.json<Transaction[]>(`/api/transactions?month=${month}`)
-      todas.push(...lista.body.filter((item) => item.installment?.groupId === serie?.groupId))
-    }
+    /*
+     * As três são da data da compra: o gasto aconteceu ali, e em competência elas somam
+     * juntas no mês da compra. O que anda é a fatura — uma parcela por mês.
+     */
+    const lista = await ana.json<Transaction[]>('/api/transactions?month=2026-09')
+    const todas = lista.body.filter((item) => item.installment?.groupId === serie?.groupId)
     expect(todas.map((item) => item.amountCents)).toEqual([3334, 3333, 3333])
     expect(todas.map((item) => item.purchaseDate)).toEqual([
       '2026-09-24',
-      '2026-10-24',
-      '2026-11-24',
+      '2026-09-24',
+      '2026-09-24',
     ])
     expect(todas.map((item) => item.statementMonth)).toEqual(['2026-10', '2026-11', '2026-12'])
     expect(todas.map((item) => item.installment?.number)).toEqual([1, 2, 3])
+
+    // Em caixa, cada parcela cai no vencimento da fatura dela — uma por mês
+    const emCaixa = await ana.json<Transaction[]>(
+      '/api/transactions?from=2026-11-01&to=2026-11-30&basis=cash',
+    )
+    const noMes = emCaixa.body.filter((item) => item.installment?.groupId === serie?.groupId)
+    expect(noMes).toHaveLength(1)
+    expect(noMes[0]?.installment?.number).toBe(2)
   })
 
-  it('fora do cartão, só a primeira parcela sai paga; as outras ficam a pagar', async () => {
+  it('fora do cartão, a competência é a da compra e o pagamento anda mês a mês', async () => {
     const primeira = await lancar({
       amountCents: 60000,
       description: 'Curso',
@@ -215,8 +224,11 @@ describe('parcelado', () => {
       splits: [{ categoryId: id('Educação'), amountCents: 60000 }],
     })
     expect(primeira.body.paymentDate).toBe('2027-01-10')
-    const fevereiro = await ana.json<Transaction[]>('/api/transactions?month=2027-02')
-    expect(fevereiro.body[0]?.paymentDate).toBeNull()
+
+    const lista = await ana.json<Transaction[]>('/api/transactions?month=2027-01')
+    const serie = lista.body.filter((item) => item.description === 'Curso')
+    expect(serie.map((item) => item.purchaseDate)).toEqual(['2027-01-10', '2027-01-10'])
+    expect(serie.map((item) => item.paymentDate)).toEqual(['2027-01-10', '2027-02-10'])
   })
 
   it('editar a série muda descrição e categoria de todas, mantendo o valor de cada uma', async () => {
@@ -239,9 +251,11 @@ describe('parcelado', () => {
         splits: [{ categoryId: id('Manutenção'), amountCents: 10000 }],
       }),
     })
-    const maio = await ana.json<Transaction[]>('/api/transactions?month=2027-05')
-    const terceira = maio.body.find(
-      (item) => item.installment?.groupId === primeira.body.installment?.groupId,
+    const marco = await ana.json<Transaction[]>('/api/transactions?month=2027-03')
+    const terceira = marco.body.find(
+      (item) =>
+        item.installment?.groupId === primeira.body.installment?.groupId &&
+        item.installment?.number === 3,
     )
     expect(terceira?.description).toBe('Geladeira nova')
     expect(terceira?.amountCents).toBe(10000)
@@ -256,18 +270,17 @@ describe('parcelado', () => {
       installments: 3,
       splits: [{ categoryId: null, amountCents: 9000 }],
     })
-    const julho = await ana.json<Transaction[]>('/api/transactions?month=2027-07')
-    const segunda = julho.body.find((item) => item.description === 'Academia')
+    const junho = await ana.json<Transaction[]>('/api/transactions?month=2027-06')
+    const segunda = junho.body.find(
+      (item) => item.description === 'Academia' && item.installment?.number === 2,
+    )
     const apagou = await ana.request(`/api/transactions/${segunda?.id}?scope=following`, {
       method: 'DELETE',
     })
     expect(apagou.status).toBe(204)
 
-    const restantes: Transaction[] = []
-    for (const month of ['2027-06', '2027-07', '2027-08']) {
-      const lista = await ana.json<Transaction[]>(`/api/transactions?month=${month}`)
-      restantes.push(...lista.body.filter((item) => item.description === 'Academia'))
-    }
+    const depois = await ana.json<Transaction[]>('/api/transactions?month=2027-06')
+    const restantes = depois.body.filter((item) => item.description === 'Academia')
     expect(restantes.map((item) => item.id)).toEqual([primeira.body.id])
   })
 })

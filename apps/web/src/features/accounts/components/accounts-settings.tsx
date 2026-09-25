@@ -1,6 +1,12 @@
-import { type Account, cardCycleOf, hasInitialBalance } from '@bolso/shared'
+import {
+  type Account,
+  accountTypePlurals,
+  accountTypes,
+  cardCycleOf,
+  hasInitialBalance,
+} from '@bolso/shared'
 import { Landmark, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog'
 import { EmptyState } from '@/components/empty-state'
 import { RowActions } from '@/components/row-actions'
@@ -23,6 +29,18 @@ export function AccountsSettings() {
     setEditing(null)
     setFormOpen(true)
   }
+
+  /*
+   * Uma lista por tipo, na ordem do balanço: o que se tem primeiro, dívida depois. Tudo
+   * junto numa lista só, cartão e conta corrente se misturavam e ficava difícil achar.
+   */
+  const grupos = useMemo(
+    () =>
+      accountTypes
+        .map((type) => ({ type, contas: accounts.filter((conta) => conta.type === type) }))
+        .filter((grupo) => grupo.contas.length > 0),
+    [accounts],
+  )
 
   return (
     <>
@@ -48,48 +66,58 @@ export function AccountsSettings() {
           text="Cadastre seus bancos, cartões e a carteira para registrar de onde sai cada gasto."
         />
       ) : (
-        <ul className="divide-y rounded-xl border bg-card">
-          {accounts.map((account) => {
-            const { label, icon: Icon } = accountTypeMeta[account.type]
-            const cycle = cardCycleOf(account)
-            const subtitle = cycle
-              ? `${label} · fecha dia ${cycle.closingDay}, vence dia ${cycle.dueDay}`
-              : label
-            const amount = hasInitialBalance(account.type)
-              ? account.initialBalanceCents
-              : account.limitCents
-            return (
-              <li
-                key={account.id}
-                className="group/row relative flex items-center gap-3 py-2.5 pr-4 pl-4"
-              >
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-                  <Icon className="size-4" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm">{account.name}</span>
-                  <span className="block text-muted-foreground text-xs">{subtitle}</span>
-                </span>
-                <RowActions
-                  itemName={account.name}
-                  onEdit={() => {
-                    setEditing(account)
-                    setFormOpen(true)
-                  }}
-                  onDelete={() => setDeleting(account)}
-                />
-                {amount !== null && (
-                  <span className="ml-auto shrink-0 pl-2 text-right text-muted-foreground text-sm tabular-nums">
-                    {!hasInitialBalance(account.type) && (
-                      <span className="block text-xs">limite</span>
+        grupos.map(({ type, contas }) => (
+          <section key={type} className="flex flex-col gap-1.5">
+            <h3 className="px-1 text-muted-foreground text-xs">
+              {accountTypePlurals[type]} <span className="tabular-nums">({contas.length})</span>
+            </h3>
+            <ul className="divide-y rounded-xl border bg-card">
+              {contas.map((account) => {
+                const { icon: Icon } = accountTypeMeta[account.type]
+                const cycle = cardCycleOf(account)
+                // O título do grupo já diz o tipo; embaixo do nome só o que ele não diz
+                const subtitle = cycle
+                  ? `fecha dia ${cycle.closingDay}, vence dia ${cycle.dueDay}`
+                  : ''
+                const amount = hasInitialBalance(account.type)
+                  ? account.initialBalanceCents
+                  : account.limitCents
+                return (
+                  <li
+                    key={account.id}
+                    className="group/row relative flex items-center gap-3 py-2.5 pr-4 pl-4"
+                  >
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                      <Icon className="size-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm">{account.name}</span>
+                      {subtitle && (
+                        <span className="block text-muted-foreground text-xs">{subtitle}</span>
+                      )}
+                    </span>
+                    <RowActions
+                      itemName={account.name}
+                      onEdit={() => {
+                        setEditing(account)
+                        setFormOpen(true)
+                      }}
+                      onDelete={() => setDeleting(account)}
+                    />
+                    {amount !== null && (
+                      <span className="ml-auto shrink-0 pl-2 text-right text-muted-foreground text-sm tabular-nums">
+                        {!hasInitialBalance(account.type) && (
+                          <span className="block text-xs">limite</span>
+                        )}
+                        {formatCents(amount)}
+                      </span>
                     )}
-                    {formatCents(amount)}
-                  </span>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        ))
       )}
 
       <AccountFormDialog open={formOpen} onOpenChange={setFormOpen} account={editing} />

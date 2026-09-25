@@ -206,6 +206,17 @@ export const pendingTransactions = pgTable(
     amountCents: bigint('amount_cents', { mode: 'number' }).notNull(),
     description: text('description').notNull(),
     kind: text('kind'),
+    /*
+     * Parcela de cartão, quando o banco conta que é uma. `purchase_date` é a data em que a
+     * **compra** foi feita — as dez parcelas de uma compra em 10x são todas dela, e é isso
+     * que faz o gasto pesar no mês certo em competência.
+     */
+    installmentNumber: smallint('installment_number'),
+    installmentCount: smallint('installment_count'),
+    purchaseDate: date('purchase_date'),
+    merchant: text('merchant'),
+    /** O lançamento inteiro, como o banco mandou: nada do que veio se perde na leitura */
+    raw: jsonb('raw').$type<Record<string, unknown>>(),
     /** pending | dismissed */
     status: text('status').notNull().default('pending'),
     ...timestamps,

@@ -8,6 +8,13 @@
 
 /** Um lançamento do extrato. Valor negativo = saiu dinheiro. */
 export type OfxTransaction = {
+  /*
+   * **Todas** as tags que vieram dentro do lançamento, cruas. O leitor usa algumas; o resto
+   * fica guardado porque banco manda campo que a gente ainda não sabe que quer (tipo de
+   * transação, número do documento, identificador do estabelecimento). Descartar na leitura
+   * é perder para sempre; guardar custa quase nada.
+   */
+  raw: Record<string, string>
   /** Identificador do banco para a transação; é ele que evita importar duas vezes */
   fitId: string
   date: string
@@ -15,6 +22,8 @@ export type OfxTransaction = {
   description: string
   /** Como o banco classificou a linha ("Pix - Enviado", "Compra com Cartão") */
   kind: string | null
+  /** "2 de 10", quando a descrição conta que é uma parcela */
+  parcela: { number: number; count: number } | null
 }
 
 export type OfxStatement = {
@@ -146,6 +155,8 @@ export function parseOfx(text: string): OfxStatement {
       amountCents,
       description: detalhe || name,
       kind: name || null,
+      parcela: lerParcelaDoTexto(`${name} ${memo}`),
+      raw: todasAsTags(bloco),
     })
   }
 
@@ -171,4 +182,31 @@ export function parseOfx(text: string): OfxStatement {
       saldo === null ? null : { amountCents: saldo, date: parseOfxDate(tagValue(text, 'DTASOF')) },
     previousBalanceCents,
   }
+}
+
+/** Cada `<TAG>valor` do bloco, sem escolher nada: o que o banco mandou, como mandou */
+function todasAsTags(bloco: string) {
+  const tags: Record<string, string> = {}
+  for (const [, tag, valor] of bloco.matchAll(/<([A-Z0-9.]+)>([^<\r\n]*)/gi)) {
+    const limpo = limparTexto(valor ?? '')
+    if (tag && limpo) tags[tag.toUpperCase()] = limpo
+  }
+  return tags
+}
+
+/*
+ * "PARC 02/10", "PARCELA 2/10", "2/10": o banco conta o parcelamento no próprio texto, que é
+ * tudo o que o OFX tem (não existe campo para isso no formato). A regra é apertada de
+ * propósito — "1/2" solto numa descrição costuma ser data, não parcela.
+ */
+export function lerParcelaDoTexto(texto: string) {
+  const match = /(?:^|\s)(?:PARC(?:ELA)?[.\s=]*)?(\d{1,2})\s*\/\s*(\d{1,2})(?=\s|$)/i.exec(texto)
+  if (!match) return null
+  const number = Number(match[1])
+  const count = Number(match[2])
+  const temPalavra = /PARC/i.test(texto)
+  // Sem a palavra "parcela", só aceita quando o total é grande o bastante para não ser data
+  if (!temPalavra && count <= 12) return null
+  if (number < 1 || count < 2 || number > count) return null
+  return { number, count }
 }

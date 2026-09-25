@@ -89,8 +89,6 @@ type TransactionFormDialogProps = {
   initialValues?: Partial<TransactionFormValues> | null
   /** Avisa quem abriu qual lançamento nasceu, para ele seguir o fluxo dele */
   onSaved?: (transaction: Transaction) => void
-  /** Abre por cima de outro diálogo (ex.: a lista de um relatório) */
-  stacked?: boolean
 }
 
 /**
@@ -110,7 +108,6 @@ export function TransactionFormDialog({
   defaultType = 'expense',
   initialValues = null,
   onSaved,
-  stacked = false,
 }: TransactionFormDialogProps) {
   const saveTransaction = useSaveTransaction()
   const [scope, setScope] = useState<EditScope>('one')
@@ -182,7 +179,7 @@ export function TransactionFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent stacked={stacked} className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
         <form onSubmit={submit} className="flex flex-col gap-5">
           <DialogHeader>
             <DialogTitle>

@@ -2,6 +2,7 @@ import {
   type Account,
   type AccountFormValues,
   accountFormSchema,
+  accountTypeHints,
   accountTypes,
   hasInitialBalance,
   isAccountType,
@@ -144,6 +145,7 @@ export function AccountFormDialog({ open, onOpenChange, account }: AccountFormDi
                   </Select>
                 )}
               />
+              <FieldDescription>{accountTypeHints[type]}</FieldDescription>
             </Field>
 
             {hasInitialBalance(type) ? (
@@ -153,15 +155,26 @@ export function AccountFormDialog({ open, onOpenChange, account }: AccountFormDi
                   control={form.control}
                   name="initialBalanceCents"
                   render={({ field }) => (
+                    /*
+                     * No empréstimo a pagar, a pessoa digita quanto deve (positivo), mas o
+                     * saldo guardado é negativo: é o que faz devolver o dinheiro andar para
+                     * zero, igual à fatura do cartão.
+                     */
                     <MoneyInput
                       id="account-balance"
-                      value={field.value}
-                      onValueChange={field.onChange}
+                      value={type === 'debt' ? Math.abs(field.value) : field.value}
+                      onValueChange={(valor) =>
+                        field.onChange(type === 'debt' ? -Math.abs(valor) : valor)
+                      }
                     />
                   )}
                 />
                 <FieldDescription>
-                  Quanto havia na conta quando você começou a usar o Bolso.
+                  {type === 'loan'
+                    ? 'Quanto você emprestou e ainda tem a receber.'
+                    : type === 'debt'
+                      ? 'Quanto você ainda deve. Devolver o dinheiro leva este valor a zero.'
+                      : 'Quanto havia na conta quando você começou a usar o Bolso.'}
                 </FieldDescription>
               </Field>
             ) : (

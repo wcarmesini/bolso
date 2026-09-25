@@ -137,6 +137,7 @@ export async function buscarContas(credenciais: Credenciais, itemId: string) {
 }
 
 type LancamentoResposta = {
+  /** Os campos que o Bolso usa hoje; o resto chega junto e vai inteiro para `raw` */
   id: string
   description: string
   descriptionRaw?: string | null
@@ -146,6 +147,18 @@ type LancamentoResposta = {
   status?: string
   category?: string | null
   paymentData?: { paymentMethod?: string | null } | null
+  merchant?: { name?: string | null } | null
+  /*
+   * Só no cartão de crédito. `purchaseDate` é o ouro aqui: é a data em que a compra foi
+   * feita, e não a data em que a parcela caiu na fatura. Nem todo banco manda — quando não
+   * manda, a data da compra é calculada a partir do número da parcela.
+   */
+  creditCardMetadata?: {
+    installmentNumber?: number | null
+    totalInstallments?: number | null
+    totalAmount?: number | null
+    purchaseDate?: string | null
+  } | null
 }
 
 export type PluggyTransaction = {
@@ -155,6 +168,24 @@ export type PluggyTransaction = {
   amountCents: number
   description: string
   kind: string | null
+  /** Só no cartão parcelado: "2 de 10" e a data em que a compra foi feita */
+  installment: {
+    number: number
+    count: number
+    /** Data da compra, quando o banco manda; senão, calculada a partir do número da parcela */
+    purchaseDate: string
+    /** O banco informou a data, ou ela foi calculada? */
+    purchaseDateFromBank: boolean
+  } | null
+  /** Nome do estabelecimento, quando vem: ajuda a juntar as parcelas da mesma compra */
+  merchant: string | null
+  /*
+   * O lançamento inteiro, como o Pluggy mandou. Lemos poucos campos hoje, mas eles mandam
+   * muito mais (estabelecimento com CNPJ, método de pagamento, identificador do provedor,
+   * situação). Guardar tudo custa quase nada e evita descobrir no futuro que a informação
+   * existia e foi jogada fora na leitura.
+   */
+  raw: Record<string, unknown>
 }
 
 /*
@@ -215,6 +246,9 @@ export async function buscarLancamentos(
         amountCents: centavosDe(item),
         description: (item.description || item.descriptionRaw || 'Lançamento').trim(),
         kind: item.category ?? item.paymentData?.paymentMethod ?? null,
+        installment: parcelaDe(item),
+        merchant: item.merchant?.name?.trim() || null,
+        raw: item as unknown as Record<string, unknown>,
       })
     }
 
@@ -222,4 +256,41 @@ export async function buscarLancamentos(
   }
 
   return lancamentos
+}
+
+/*
+ * A parcela, quando o banco conta que é uma.
+ *
+ * O Pluggy manda "2 de 10" em `creditCardMetadata`, e alguns bancos mandam junto a data da
+ * compra. Quando não mandam, ela é calculada: a parcela 2 que caiu em setembro veio de uma
+ * compra de agosto. O mês acerta; o dia é o mesmo da parcela, que é o melhor palpite
+ * possível — e o campo diz qual dos dois caminhos foi usado.
+ */
+function parcelaDe(item: LancamentoResposta): PluggyTransaction['installment'] {
+  const meta = item.creditCardMetadata
+  const number = meta?.installmentNumber ?? 0
+  const count = meta?.totalInstallments ?? 0
+  if (!meta || number < 1 || count < 2) return null
+
+  const doBanco = meta.purchaseDate?.slice(0, 10)
+  if (doBanco) {
+    return { number, count, purchaseDate: doBanco, purchaseDateFromBank: true }
+  }
+  return {
+    number,
+    count,
+    purchaseDate: mesesAtras(item.date.slice(0, 10), number - 1),
+    purchaseDateFromBank: false,
+  }
+}
+
+/** "2026-09-14" menos 1 mês → "2026-08-14" (o último dia do mês quando não existe o dia) */
+function mesesAtras(date: string, quantos: number) {
+  const [ano, mes, dia] = date.split('-').map(Number)
+  const base = new Date(Date.UTC(ano ?? 1970, (mes ?? 1) - 1 - quantos, 1))
+  const ultimoDia = new Date(
+    Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0),
+  ).getUTCDate()
+  base.setUTCDate(Math.min(dia ?? 1, ultimoDia))
+  return base.toISOString().slice(0, 10)
 }

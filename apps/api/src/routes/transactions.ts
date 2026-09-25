@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import {
-  addMonthsToDate,
   deleteScopeQuerySchema,
   editScopeQuerySchema,
   monthRange,
@@ -13,7 +12,7 @@ import {
   transactionListQuerySchema,
 } from '@bolso/shared'
 import { zValidator } from '@hono/zod-validator'
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
 import { categories, contacts, transactionSplits, transactions, user } from '../db/schema'
@@ -264,7 +263,15 @@ export function transactionsRoutes(deps: Deps) {
           .select()
           .from(transactions)
           .where(where)
-          .orderBy(desc(transactions.purchaseDate), desc(transactions.createdAt))
+          /*
+           * Mais recente primeiro. As parcelas de uma compra dividem a mesma data — entre
+           * elas, vale a ordem da série: "1 de 10" antes de "2 de 10".
+           */
+          .orderBy(
+            desc(transactions.purchaseDate),
+            asc(transactions.installmentNumber),
+            desc(transactions.createdAt),
+          )
         return c.json(await present(rows))
       })
 
@@ -283,9 +290,11 @@ export function transactionsRoutes(deps: Deps) {
         const created = await db.transaction(async (tx) => {
           const rows: Row[] = []
           for (const [index, amountCents] of amounts.entries()) {
-            const purchaseDate = addMonthsToDate(values.purchaseDate, index)
-            // Fora do cartão, só a primeira parcela pode já estar paga; as outras ficam a pagar
-            const informedPayment = index === 0 ? values.paymentDate : null
+            /*
+             * Todas as parcelas são da **data da compra**: foi ali que o gasto aconteceu, e é
+             * assim que elas somam juntas no regime de competência. O que anda mês a mês é o
+             * caixa — a fatura de cada parcela, ou a data de pagamento fora do cartão.
+             */
             const [row] = await tx
               .insert(transactions)
               .values({
@@ -295,8 +304,8 @@ export function transactionsRoutes(deps: Deps) {
                 description: values.description,
                 accountId: values.accountId,
                 contactId: values.contactId,
-                purchaseDate,
-                ...cashFields(purchaseDate, informedPayment, cycle),
+                purchaseDate: values.purchaseDate,
+                ...cashFields(values.purchaseDate, values.paymentDate, cycle, index),
                 installmentGroupId: seriesId,
                 installmentNumber: seriesId ? index + 1 : null,
                 installmentCount: seriesId ? count : null,

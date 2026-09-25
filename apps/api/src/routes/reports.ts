@@ -7,6 +7,7 @@ import {
   type CategoryTotal,
   categoryStyle,
   formatMonth,
+  isLiability,
   type MonthlyReport,
   type MonthlyRow,
   type MonthlySection,
@@ -444,8 +445,8 @@ export function reportsRoutes(deps: Deps) {
           return total
         }
 
-        const doLadoDoQueSeTem = contas.filter((conta) => conta.type !== 'credit_card')
-        const cartoes = contas.filter((conta) => conta.type === 'credit_card')
+        const doLadoDoQueSeTem = contas.filter((conta) => !isLiability(conta.type))
+        const cartoes = contas.filter((conta) => isLiability(conta.type))
 
         const assets = { rows: doLadoDoQueSeTem.map(linhaDaConta), values: zeros() }
         assets.values = somar(assets.rows)

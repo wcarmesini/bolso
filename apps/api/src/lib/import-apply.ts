@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { CardCycle, TransactionOrigin } from '@bolso/shared'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, isNotNull, isNull } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import { accounts, transactionSplits, transactions } from '../db/schema'
 import { HttpError } from '../http'
@@ -28,6 +28,14 @@ type Linha = {
   /** Negativo = saída */
   amountCents: number
   description: string
+  /*
+   * Parcela de cartão. A competência de todas as parcelas é a data da **compra**; o que anda
+   * mês a mês é o caixa, e para isso vale a data que o banco deu a esta parcela.
+   */
+  installmentNumber?: number | null
+  installmentCount?: number | null
+  purchaseDate?: string | null
+  merchant?: string | null
 }
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0]
@@ -40,6 +48,10 @@ export async function criarLancamento(
   contactId: string | null,
 ) {
   const amountCents = Math.abs(linha.amountCents)
+  const parcela = await serieDaParcela(tx, contexto, linha)
+  // A compra aconteceu na data da compra; o dinheiro sai na data que o banco deu à parcela
+  const purchaseDate = parcela?.purchaseDate ?? linha.date
+
   const [created] = await tx
     .insert(transactions)
     .values({
@@ -49,8 +61,11 @@ export async function criarLancamento(
       description: linha.description,
       accountId: contexto.accountId,
       contactId,
-      purchaseDate: linha.date,
+      purchaseDate,
       ...cashFields(linha.date, linha.date, contexto.cycle),
+      installmentGroupId: parcela?.groupId ?? null,
+      installmentNumber: parcela?.number ?? null,
+      installmentCount: parcela?.count ?? null,
       origin: contexto.origin,
       externalId: linha.externalId,
       createdBy: contexto.userId,
@@ -278,3 +293,42 @@ export async function conciliarDividindo(
 
 const reais = (centavos: number) =>
   (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+/*
+ * Juntar as parcelas da mesma compra.
+ *
+ * O Pluggy não manda um identificador que ligue as dez parcelas — eles dizem isso na
+ * documentação e recomendam heurística. A nossa âncora é a **data da compra** (que vem do
+ * banco quando ele manda, ou é calculada): as parcelas de uma mesma compra dividem a data, o
+ * total de parcelas e a conta. Quando uma parcela dessa série já entrou, a nova entra junto;
+ * senão, começa uma série nova.
+ */
+async function serieDaParcela(tx: Tx, contexto: Contexto, linha: Linha) {
+  const number = linha.installmentNumber ?? 0
+  const count = linha.installmentCount ?? 0
+  const purchaseDate = linha.purchaseDate
+  if (!purchaseDate || number < 1 || count < 2) return null
+
+  const [irma] = await tx
+    .select({ groupId: transactions.installmentGroupId })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.groupId, contexto.groupId),
+        eq(transactions.accountId, contexto.accountId),
+        isNull(transactions.deletedAt),
+        eq(transactions.purchaseDate, purchaseDate),
+        eq(transactions.installmentCount, count),
+        eq(transactions.description, linha.description),
+        isNotNull(transactions.installmentGroupId),
+      ),
+    )
+    .limit(1)
+
+  return {
+    groupId: irma?.groupId ?? randomUUID(),
+    number,
+    count,
+    purchaseDate,
+  }
+}

@@ -1,5 +1,14 @@
 import { type AccountType, accountTypeLabels } from '@bolso/shared'
-import { CreditCard, Landmark, type LucideIcon, PiggyBank, TrendingUp, Wallet } from 'lucide-react'
+import {
+  CreditCard,
+  HandCoins,
+  Handshake,
+  Landmark,
+  type LucideIcon,
+  PiggyBank,
+  TrendingUp,
+  Wallet,
+} from 'lucide-react'
 
 const icons: Record<AccountType, LucideIcon> = {
   checking: Landmark,
@@ -7,6 +16,8 @@ const icons: Record<AccountType, LucideIcon> = {
   credit_card: CreditCard,
   cash: Wallet,
   investment: TrendingUp,
+  loan: HandCoins,
+  debt: Handshake,
 }
 
 // Junta o rótulo (vem do pacote compartilhado) com o ícone (só faz sentido na interface)

@@ -319,6 +319,26 @@ cartão — importar três meses de uma vez continua certo, porque a conta é fe
 (e o dia do fechamento separa: comprou no dia 4 vai para esta fatura, no dia 5 vai para a
 seguinte).
 
+**Compra parcelada.** As dez parcelas de uma compra em 10x são todas da **data da compra**: foi
+ali que o gasto aconteceu, e é assim que elas somam juntas no regime de competência. O que anda
+mês a mês é o **caixa** — cada parcela na sua fatura, com o seu vencimento. Vale para o
+parcelamento lançado à mão e para o que vem do banco.
+
+Do Pluggy vem `creditCardMetadata`, com o número da parcela, o total e — quando o banco manda —
+a **data da compra**. Quando não manda, a data é calculada: a parcela 2 que caiu em setembro
+veio de uma compra de agosto. No OFX não existe campo para isso, então o número sai do próprio
+texto (`PARC 02/10`), com uma regra apertada para não confundir parcela com data.
+
+As parcelas que chegam mês a mês se juntam numa **série** (a mesma de "3 de 10" do lançamento
+manual), então editar ou excluir a série inteira funciona igual. O Pluggy não manda um
+identificador que ligue as parcelas — eles dizem isso na documentação —, então a âncora é a
+data da compra, mais o total de parcelas, a conta e a descrição.
+
+**Tudo o que o banco manda fica guardado.** Cada linha da caixa de entrada leva o payload
+inteiro do Pluggy (`raw`), e cada lançamento do OFX leva todas as tags do bloco. O Bolso usa
+poucos campos hoje, mas descartar na leitura é perder para sempre — e foi assim que o número da
+parcela passou despercebido por um tempo.
+
 **Transferência e pagamento de fatura.** Cada linha tem uma quarta saída além de aprovar,
 conciliar e dispensar: **Transferir**. Ela é para dinheiro que só mudou de conta — a fatura do
 cartão saindo da corrente, dinheiro indo para a poupança, um saque. Vira uma transferência de

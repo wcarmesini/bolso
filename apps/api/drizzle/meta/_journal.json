@@ -78,6 +78,34 @@
       "when": 1790339812927,
       "tag": "0010_rastro_e_lixeira",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790341594219,
+      "tag": "0011_conta_emprestimo",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790341595219,
+      "tag": "0012_parcelas_na_data_da_compra",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790342967794,
+      "tag": "0013_parcelas_do_banco",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790343155625,
+      "tag": "0014_guardar_o_bruto",
+      "breakpoints": true
     }
   ]
 }
