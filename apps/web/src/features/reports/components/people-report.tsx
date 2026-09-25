@@ -8,7 +8,7 @@ import { currentMonth } from '@/lib/dates'
 import { formatCents, formatShare } from '@/lib/money'
 import { usePeopleReport } from '../queries'
 
-/** Quem lançou quanto no mês (pela data da compra). Todo mundo do grupo aparece, mesmo zerado. */
+/** Quem lançou quanto no mês (pela data da compra). Todo mundo do orçamento aparece, mesmo zerado. */
 export function PeopleReport() {
   const [month, setMonth] = useState(currentMonth)
   const { data, isPending, isError } = usePeopleReport(month)
@@ -28,15 +28,15 @@ export function PeopleReport() {
       ) : people.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="Ninguém no grupo"
-          text="Convide alguém em Ajustes → Grupo."
+          title="Ninguém mais neste orçamento"
+          text="Convide alguém em Ajustes → Orçamentos."
         />
       ) : (
         <div className={`flex flex-col gap-4 ${isPending ? 'opacity-60' : ''}`}>
           <p className="px-1 text-muted-foreground text-xs">
             Gastos lançados no mês:{' '}
             <span className="text-foreground tabular-nums">{formatCents(total)}</span>
-            {people.length === 1 && ' · convide alguém em Ajustes → Grupo para dividir o orçamento'}
+            {people.length === 1 && ' · convide alguém em Ajustes → Orçamentos para dividir'}
           </p>
           <ul className="divide-y rounded-xl border bg-card">
             {people.map((person) => (

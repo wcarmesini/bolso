@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Contact2,
   KeyRound,
   Landmark,
@@ -6,21 +7,20 @@ import {
   Smartphone,
   Tags,
   UserRound,
-  Users,
 } from 'lucide-react'
 
 export const settingsSections = [
   {
     to: '/ajustes/perfil',
     title: 'Perfil',
-    description: 'Seu nome e como você aparece no grupo',
+    description: 'Seu nome e como você aparece para quem divide',
     icon: UserRound,
   },
   {
-    to: '/ajustes/grupo',
-    title: 'Grupo',
-    description: 'Pessoas que dividem o orçamento',
-    icon: Users,
+    to: '/ajustes/orcamentos',
+    title: 'Orçamentos',
+    description: 'Seus livros e quem divide cada um',
+    icon: BookOpen,
   },
   {
     to: '/ajustes/categorias',

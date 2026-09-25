@@ -89,7 +89,7 @@ export function requireGroup({ auth, db }: Deps) {
 
     if (!membership) {
       membership = await firstMembership(db, user.id)
-      if (!membership) throw new HttpError(403, 'Você não participa de nenhum grupo.')
+      if (!membership) throw new HttpError(403, 'Você não participa de nenhum orçamento.')
       await db
         .update(session)
         .set({ activeOrganizationId: membership.organizationId })

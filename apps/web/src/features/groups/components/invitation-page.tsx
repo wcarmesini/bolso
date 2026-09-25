@@ -46,7 +46,7 @@ export function InvitationPage({ id }: { id: string }) {
           <EmptyState
             icon={MailX}
             title="Convite indisponível"
-            text="Ele já foi usado ou passou do prazo. Peça um novo para quem administra o grupo."
+            text="Ele já foi usado ou passou do prazo. Peça um novo para quem administra o orçamento."
           />
         ) : !invitation.forYou ? (
           <EmptyState
@@ -68,7 +68,7 @@ export function InvitationPage({ id }: { id: string }) {
               </p>
             </div>
             <Button onClick={join} disabled={accept.isPending}>
-              {accept.isPending ? 'Entrando…' : 'Entrar no grupo'}
+              {accept.isPending ? 'Entrando…' : 'Entrar no orçamento'}
             </Button>
           </div>
         )}

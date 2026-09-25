@@ -65,7 +65,7 @@ export function devRoutes({ auth, db }: Deps) {
           (sessao.session.activeOrganizationId
             ? { organizationId: sessao.session.activeOrganizationId }
             : undefined) ?? (await firstMembership(db, sessao.user.id))
-        if (!membership) return c.json({ error: 'Sem grupo.' }, 400)
+        if (!membership) return c.json({ error: 'Sem orçamento.' }, 400)
         const groupId = membership.organizationId
 
         const { accountId } = c.req.valid('json')

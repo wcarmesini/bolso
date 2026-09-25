@@ -13,7 +13,7 @@ export function groupsRoutes(deps: Deps) {
 
   const requireManager = (role: string) => {
     if (role !== 'owner' && role !== 'admin') {
-      throw new HttpError(403, 'Só quem administra o grupo pode fazer isso.')
+      throw new HttpError(403, 'Só quem administra o orçamento pode fazer isso.')
     }
   }
 
@@ -94,9 +94,9 @@ export function groupsRoutes(deps: Deps) {
               headers: c.req.raw.headers,
               body: { name, slug: `bolso-${randomUUID()}` },
             }),
-          'Não foi possível criar o grupo.',
+          'Não foi possível criar o orçamento.',
         )
-        if (!created) throw new HttpError(500, 'Não foi possível criar o grupo.')
+        if (!created) throw new HttpError(500, 'Não foi possível criar o orçamento.')
         await seedDefaultCategories(db, created.id)
         return c.json({ id: created.id, name: created.name }, 201)
       })

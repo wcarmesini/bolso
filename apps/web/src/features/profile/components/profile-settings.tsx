@@ -43,7 +43,7 @@ export function ProfileSettings() {
     <>
       <SectionHeader
         title="Perfil"
-        description="Seu nome e sua foto aparecem no avatar e para quem divide o grupo."
+        description="Seu nome e sua foto aparecem no avatar e para quem divide o orçamento."
       />
 
       <div className="flex flex-col gap-6 rounded-xl border bg-card p-4 md:p-6">
@@ -67,9 +67,7 @@ export function ProfileSettings() {
             <Field>
               <FieldLabel htmlFor="profile-email">E-mail</FieldLabel>
               <Input id="profile-email" disabled placeholder="Disponível quando o login existir" />
-              <FieldDescription>
-                Vai servir para entrar e receber convites de grupo.
-              </FieldDescription>
+              <FieldDescription>Vai servir para entrar e receber convites.</FieldDescription>
             </Field>
           </FieldGroup>
 

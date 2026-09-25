@@ -14,7 +14,7 @@ import { TopBar } from './top-bar'
  * Sem `children`, mostra a rota atual; com `children`, mostra o conteúdo recebido (ex.: 404).
  */
 export function AppShell({ children }: { children?: ReactNode }) {
-  // O que outra pessoa do grupo gravar aparece aqui sozinho
+  // O que outra pessoa do orçamento gravar aparece aqui sozinho
   useRealtime()
 
   return (

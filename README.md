@@ -16,8 +16,8 @@ Sistema de **orçamento colaborativo**: **leve, rápido, bonito e em tempo real*
 | Tipos e validações compartilhados (`packages/shared`) | ✅ Um Zod só, válido para o front e para a API |
 | Tempo real | ✅ WebSocket por grupo, testado com duas pessoas: a mudança aparece na outra tela em ~15ms |
 | Login | ✅ Sessões com Better Auth. **Google configurado** (em desenvolvimento); faltam Apple e Microsoft (ver [Pendências](#pendências)). A tela de login só tem os botões dos provedores |
-| Grupos | ✅ Grupo pessoal no primeiro acesso, convite por link, troca de grupo |
-| Ajustes | ✅ Perfil, Grupo, Categorias, Contas, Contatos, Integrações e Chaves de API, tudo gravando no banco |
+| Orçamentos | ✅ Um orçamento pessoal no primeiro acesso, convite por link, troca de orçamento |
+| Ajustes | ✅ Perfil, Orçamentos, Categorias, Contas, Contatos, Integrações e Chaves de API, tudo gravando no banco |
 | **Lançamentos** | ✅ Cartão de crédito com fatura, compras parceladas, lançamento dividido em categorias, cópia de lançamento e contato, em tempo real |
 | **Importar extrato (OFX)** | ✅ Lê o arquivo do banco, concilia com o que já foi lançado e importa o resto |
 | **Banco conectado (Open Finance)** | ✅ Pluggy. O Bolso busca sozinho e o que chega **espera aprovação**; nada entra no orçamento sem alguém dizer que pode |
@@ -419,8 +419,8 @@ Por isso reimportar o mesmo arquivo não duplica nada, e o que foi conciliado ap
 Feitos com **Better Auth**, que grava sessões no próprio banco. O plugin de organizações vira os **grupos** do Bolso.
 
 - **Primeiro acesso:** ao criar a conta, a pessoa já ganha um grupo pessoal ("Meu Bolso") com **10 categorias iniciais** prontas, algumas com subcategorias. Ninguém começa com a tela vazia.
-- **Convite:** em Ajustes → Grupo, escrever o e-mail gera um **link**, que já vai copiado para a área de transferência (serve para mandar no WhatsApp). Quem abre o link vê de qual grupo é o convite e entra com um clique. O link continua valendo quando existir envio por e-mail: o convite é o mesmo.
-- **Várias pessoas, vários grupos:** cada pessoa pode estar em mais de um grupo (o dela e o da casa, por exemplo) e troca de grupo em Ajustes → Grupo. A sessão guarda qual é o grupo ativo.
+- **Convite:** em Ajustes → Orçamentos, escrever o e-mail gera um **link**, que já vai copiado para a área de transferência (serve para mandar no WhatsApp). Quem abre o link vê para qual orçamento é o convite e entra com um clique. O link continua valendo quando existir envio por e-mail: o convite é o mesmo.
+- **Várias pessoas, vários orçamentos:** cada pessoa pode estar em mais de um orçamento (o dela e o da casa, por exemplo) e troca em Ajustes → Orçamentos. A sessão guarda qual é o orçamento em uso.
 - **A tela de login mostra só os provedores configurados** (pergunta em `/api/auth-providers`). Em desenvolvimento, os que faltam aparecem desligados, para lembrar o que falta; em produção, somem.
 - **Depois de entrar, a pessoa volta para onde queria ir** (`/entrar?continuar=/lancamentos`). Se o provedor recusar ou ela cancelar, volta para `/entrar` com o motivo num aviso, em vez de uma página de erro crua.
 - **Mesmo e-mail, mesma conta:** quem já tinha conta e entra pelo Google com o mesmo e-mail cai na conta que já existia (o Google confirma o e-mail, então a ligação é automática).
@@ -560,7 +560,7 @@ Os números de topo das telas usam o mesmo bloco (`components/stat-grid.tsx`), e
 | Seção | O que faz |
 |---|---|
 | **Perfil** | Nome e **foto** (aparecem no avatar, para você e para quem divide o grupo). A foto é escolhida da galeria ou câmera, recortada no centro em quadrado e reduzida para 256×256 (poucos KB), e salva na hora. "Remover" volta às iniciais |
-| **Grupo** | Nome do grupo, quem está nele, convite por link, criar outro grupo e trocar o grupo em uso |
+| **Orçamentos** | Nome deste orçamento, quem compartilha, convite por link, criar outro e trocar o que está em uso |
 | **Categorias** | Despesas e receitas com nome, ícone e cor, e **subcategorias** (um nível só). **Só a categoria principal tem ícone e cor**: a subcategoria é só o nome e segue o tipo da principal. São **164 ícones em 10 famílias** (Alimentação, Casa, Contas e serviços…), com busca em português que entende tanto o **significado** quanto o **nome do desenho** — "luz" e "raio" acham Energia, "uber" acha Táxi, "cadeado" acha o cadeado — e sugestões a partir do nome que está sendo digitado. Plural não atrapalha ("Filhos" sugere o bebê), porque a comparação é por radical, e o que casa mais cedo no vocabulário do ícone aparece primeiro. A **cor é livre**: paleta pronta, matiz/intensidade/claridade ou o hex colado. O ícone nunca some: o app mede o **contraste real** (WCAG) da cor contra o fundo do selo em cada tema e clareia ou escurece só o quanto for preciso para passar de 3,6:1 — um rosa clarinho vira magenta no tema claro, um azul-marinho clareia no escuro, e o tom escolhido continua sendo o da pessoa (é ele que aparece nas bolinhas da paleta). A lista se **reordena arrastando** pela alça (mouse, toque ou setas do teclado), e a ordem vale para o grupo inteiro. Arrastando, a categoria vira uma cópia solta na tela, que não é cortada pelas bordas do grupo — e **soltar uma subcategoria em cima de outra principal a muda de lugar**, levando o tipo da nova mãe junto. Nome repetido no destino é recusado, com o aviso dizendo qual é. Começa com 10 categorias comuns, algumas já com subcategorias (Moradia → Aluguel, Condomínio…). Não deixa repetir nome entre irmãs, ignorando acento e maiúscula. Excluir uma principal exclui as subcategorias junto |
 | **Contas** | Conta corrente, poupança, cartão de crédito, dinheiro e investimento, com saldo inicial (exceto cartão, que ganha limite e fatura depois) |
 | **Contatos** | Quem recebe ou paga: nome, pessoa ou empresa, documento e observação. Excluir um contato não apaga os lançamentos dele |
@@ -838,3 +838,24 @@ linha volta para a caixa de entrada — porque de novo ninguém respondeu por el
 **Nada do que o banco mandou se perde.** O que foi **dispensado** fica guardado e aparece em
 "Dispensados", na caixa de entrada: dá para rever meses depois, ou trazer de volta para a fila
 quando alguém dispensou por engano.
+
+---
+
+## O que é um "orçamento" aqui
+
+A palavra faz dois trabalhos no Bolso, e vale saber qual é qual:
+
+- **O orçamento** (Ajustes → Orçamentos) é o **livro**: a contabilidade inteira. Quatorze
+  tabelas carregam `group_id` — categorias, contas, contatos, lançamentos, partes, limites,
+  chaves do Pluggy, chaves da API, conexões bancárias, caixa de entrada, lotes de importação,
+  conciliações e o rastro de auditoria. Criar outro orçamento cria uma base nova, com as
+  categorias padrão e mais nada: nenhum relatório atravessa dois.
+- **O Orçamento** da barra de cima são os **limites por categoria** dentro do livro em uso.
+
+Quem é seu é o login: nome, foto e e-mail vivem na conta e não pertencem a orçamento nenhum.
+Você participa de vários, e a sessão guarda qual está em uso. Convidar alguém é dar acesso ao
+livro inteiro — não há meio-acesso.
+
+**Por dentro, o código continua falando `group`/`groupId`.** Renomear catorze tabelas e
+centenas de referências não mudaria nada para quem usa, e mexer nisso em cima de dados reais
+é risco sem ganho. O nome novo vale onde as pessoas leem.

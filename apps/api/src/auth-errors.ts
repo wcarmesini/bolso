@@ -6,11 +6,11 @@ import { HttpError } from './http'
 const messages: Record<string, string> = {
   YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION: 'Este convite foi enviado para outro e-mail.',
   INVITATION_NOT_FOUND: 'Convite não encontrado ou expirado.',
-  USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION: 'Essa pessoa já participa do grupo.',
+  USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION: 'Essa pessoa já participa deste orçamento.',
   USER_IS_ALREADY_INVITED_TO_THIS_ORGANIZATION: 'Essa pessoa já foi convidada.',
   YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION:
-    'Só quem administra o grupo pode convidar.',
-  USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION: 'Você não participa desse grupo.',
+    'Só quem administra o orçamento pode convidar.',
+  USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION: 'Você não participa desse orçamento.',
   ORGANIZATION_NOT_FOUND: 'Grupo não encontrado.',
 }
 

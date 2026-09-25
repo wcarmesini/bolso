@@ -29,7 +29,7 @@ export function AccountMenu() {
   const leave = async () => {
     try {
       await signOut()
-      // Limpa os dados do grupo antes de sair, para nada ficar em cache
+      // Limpa os dados do orçamento antes de sair, para nada ficar em cache
       queryClient.clear()
       await navigate({ to: '/entrar' })
     } catch (cause) {
@@ -55,7 +55,7 @@ export function AccountMenu() {
       <DropdownMenuContent align="end" sideOffset={8} className="w-56">
         <div className="px-1.5 py-1.5">
           <p className="truncate font-medium text-sm">{name}</p>
-          <p className="truncate text-muted-foreground text-xs">{groupName ?? 'Sem grupo'}</p>
+          <p className="truncate text-muted-foreground text-xs">{groupName ?? 'Sem orçamento'}</p>
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>

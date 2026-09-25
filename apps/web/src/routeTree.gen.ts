@@ -22,8 +22,8 @@ import { Route as AppAjustesCategoriasRouteImport } from './routes/_app.ajustes.
 import { Route as AppAjustesChavesApiRouteImport } from './routes/_app.ajustes.chaves-api'
 import { Route as AppAjustesContasRouteImport } from './routes/_app.ajustes.contas'
 import { Route as AppAjustesContatosRouteImport } from './routes/_app.ajustes.contatos'
-import { Route as AppAjustesGrupoRouteImport } from './routes/_app.ajustes.grupo'
 import { Route as AppAjustesIntegracoesRouteImport } from './routes/_app.ajustes.integracoes'
+import { Route as AppAjustesOrcamentosRouteImport } from './routes/_app.ajustes.orcamentos'
 import { Route as AppAjustesPerfilRouteImport } from './routes/_app.ajustes.perfil'
 import { Route as AppConviteIdRouteImport } from './routes/_app.convite.$id'
 import { Route as AppRelatoriosIndexRouteImport } from './routes/_app.relatorios.index'
@@ -93,14 +93,14 @@ const AppAjustesContatosRoute = AppAjustesContatosRouteImport.update({
   path: '/contatos',
   getParentRoute: () => AppAjustesRoute,
 } as any)
-const AppAjustesGrupoRoute = AppAjustesGrupoRouteImport.update({
-  id: '/grupo',
-  path: '/grupo',
-  getParentRoute: () => AppAjustesRoute,
-} as any)
 const AppAjustesIntegracoesRoute = AppAjustesIntegracoesRouteImport.update({
   id: '/integracoes',
   path: '/integracoes',
+  getParentRoute: () => AppAjustesRoute,
+} as any)
+const AppAjustesOrcamentosRoute = AppAjustesOrcamentosRouteImport.update({
+  id: '/orcamentos',
+  path: '/orcamentos',
   getParentRoute: () => AppAjustesRoute,
 } as any)
 const AppAjustesPerfilRoute = AppAjustesPerfilRouteImport.update({
@@ -136,8 +136,8 @@ export interface FileRoutesByFullPath {
   '/ajustes/chaves-api': typeof AppAjustesChavesApiRoute
   '/ajustes/contas': typeof AppAjustesContasRoute
   '/ajustes/contatos': typeof AppAjustesContatosRoute
-  '/ajustes/grupo': typeof AppAjustesGrupoRoute
   '/ajustes/integracoes': typeof AppAjustesIntegracoesRoute
+  '/ajustes/orcamentos': typeof AppAjustesOrcamentosRoute
   '/ajustes/perfil': typeof AppAjustesPerfilRoute
   '/convite/$id': typeof AppConviteIdRoute
   '/relatorios/$slug': typeof AppRelatoriosSlugRoute
@@ -155,8 +155,8 @@ export interface FileRoutesByTo {
   '/ajustes/chaves-api': typeof AppAjustesChavesApiRoute
   '/ajustes/contas': typeof AppAjustesContasRoute
   '/ajustes/contatos': typeof AppAjustesContatosRoute
-  '/ajustes/grupo': typeof AppAjustesGrupoRoute
   '/ajustes/integracoes': typeof AppAjustesIntegracoesRoute
+  '/ajustes/orcamentos': typeof AppAjustesOrcamentosRoute
   '/ajustes/perfil': typeof AppAjustesPerfilRoute
   '/convite/$id': typeof AppConviteIdRoute
   '/relatorios/$slug': typeof AppRelatoriosSlugRoute
@@ -177,8 +177,8 @@ export interface FileRoutesById {
   '/_app/ajustes/chaves-api': typeof AppAjustesChavesApiRoute
   '/_app/ajustes/contas': typeof AppAjustesContasRoute
   '/_app/ajustes/contatos': typeof AppAjustesContatosRoute
-  '/_app/ajustes/grupo': typeof AppAjustesGrupoRoute
   '/_app/ajustes/integracoes': typeof AppAjustesIntegracoesRoute
+  '/_app/ajustes/orcamentos': typeof AppAjustesOrcamentosRoute
   '/_app/ajustes/perfil': typeof AppAjustesPerfilRoute
   '/_app/convite/$id': typeof AppConviteIdRoute
   '/_app/relatorios/$slug': typeof AppRelatoriosSlugRoute
@@ -199,8 +199,8 @@ export interface FileRouteTypes {
     | '/ajustes/chaves-api'
     | '/ajustes/contas'
     | '/ajustes/contatos'
-    | '/ajustes/grupo'
     | '/ajustes/integracoes'
+    | '/ajustes/orcamentos'
     | '/ajustes/perfil'
     | '/convite/$id'
     | '/relatorios/$slug'
@@ -218,8 +218,8 @@ export interface FileRouteTypes {
     | '/ajustes/chaves-api'
     | '/ajustes/contas'
     | '/ajustes/contatos'
-    | '/ajustes/grupo'
     | '/ajustes/integracoes'
+    | '/ajustes/orcamentos'
     | '/ajustes/perfil'
     | '/convite/$id'
     | '/relatorios/$slug'
@@ -239,8 +239,8 @@ export interface FileRouteTypes {
     | '/_app/ajustes/chaves-api'
     | '/_app/ajustes/contas'
     | '/_app/ajustes/contatos'
-    | '/_app/ajustes/grupo'
     | '/_app/ajustes/integracoes'
+    | '/_app/ajustes/orcamentos'
     | '/_app/ajustes/perfil'
     | '/_app/convite/$id'
     | '/_app/relatorios/$slug'
@@ -346,18 +346,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAjustesContatosRouteImport
       parentRoute: typeof AppAjustesRoute
     }
-    '/_app/ajustes/grupo': {
-      id: '/_app/ajustes/grupo'
-      path: '/grupo'
-      fullPath: '/ajustes/grupo'
-      preLoaderRoute: typeof AppAjustesGrupoRouteImport
-      parentRoute: typeof AppAjustesRoute
-    }
     '/_app/ajustes/integracoes': {
       id: '/_app/ajustes/integracoes'
       path: '/integracoes'
       fullPath: '/ajustes/integracoes'
       preLoaderRoute: typeof AppAjustesIntegracoesRouteImport
+      parentRoute: typeof AppAjustesRoute
+    }
+    '/_app/ajustes/orcamentos': {
+      id: '/_app/ajustes/orcamentos'
+      path: '/orcamentos'
+      fullPath: '/ajustes/orcamentos'
+      preLoaderRoute: typeof AppAjustesOrcamentosRouteImport
       parentRoute: typeof AppAjustesRoute
     }
     '/_app/ajustes/perfil': {
@@ -397,8 +397,8 @@ interface AppAjustesRouteChildren {
   AppAjustesChavesApiRoute: typeof AppAjustesChavesApiRoute
   AppAjustesContasRoute: typeof AppAjustesContasRoute
   AppAjustesContatosRoute: typeof AppAjustesContatosRoute
-  AppAjustesGrupoRoute: typeof AppAjustesGrupoRoute
   AppAjustesIntegracoesRoute: typeof AppAjustesIntegracoesRoute
+  AppAjustesOrcamentosRoute: typeof AppAjustesOrcamentosRoute
   AppAjustesPerfilRoute: typeof AppAjustesPerfilRoute
   AppAjustesIndexRoute: typeof AppAjustesIndexRoute
 }
@@ -409,8 +409,8 @@ const AppAjustesRouteChildren: AppAjustesRouteChildren = {
   AppAjustesChavesApiRoute: AppAjustesChavesApiRoute,
   AppAjustesContasRoute: AppAjustesContasRoute,
   AppAjustesContatosRoute: AppAjustesContatosRoute,
-  AppAjustesGrupoRoute: AppAjustesGrupoRoute,
   AppAjustesIntegracoesRoute: AppAjustesIntegracoesRoute,
+  AppAjustesOrcamentosRoute: AppAjustesOrcamentosRoute,
   AppAjustesPerfilRoute: AppAjustesPerfilRoute,
   AppAjustesIndexRoute: AppAjustesIndexRoute,
 }

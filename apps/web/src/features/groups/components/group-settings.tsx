@@ -37,9 +37,9 @@ export function GroupSettings() {
     if (!name || name === activeGroup?.name) return
     try {
       await renameGroup.mutateAsync(name)
-      toast.success('Nome do grupo salvo')
+      toast.success('Nome do orçamento salvo')
     } catch (cause) {
-      toast.error(errorMessage(cause, 'Não foi possível renomear o grupo.'))
+      toast.error(errorMessage(cause, 'Não foi possível renomear o orçamento.'))
     }
   }
 
@@ -50,9 +50,9 @@ export function GroupSettings() {
     try {
       await createGroup.mutateAsync(name)
       setNewGroupName('')
-      toast.success(`Grupo “${name}” criado`)
+      toast.success(`Orçamento “${name}” criado`)
     } catch (cause) {
-      toast.error(errorMessage(cause, 'Não foi possível criar o grupo.'))
+      toast.error(errorMessage(cause, 'Não foi possível criar o orçamento.'))
     }
   }
 
@@ -61,21 +61,21 @@ export function GroupSettings() {
       await activateGroup.mutateAsync(id)
       toast.success(`Agora você está em “${name}”`)
     } catch (cause) {
-      toast.error(errorMessage(cause, 'Não foi possível trocar de grupo.'))
+      toast.error(errorMessage(cause, 'Não foi possível trocar de orçamento.'))
     }
   }
 
   return (
     <>
       <SectionHeader
-        title="Grupo"
-        description="Quem divide o orçamento com você vê e lança tudo em tempo real."
+        title="Orçamentos"
+        description="Cada orçamento é uma contabilidade inteira: contas, categorias e lançamentos. Quem você convida vê e lança tudo em tempo real."
       />
 
       {canManage && (
         <form onSubmit={rename} className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <Field className="flex-1">
-            <FieldLabel htmlFor="group-name">Nome do grupo</FieldLabel>
+            <FieldLabel htmlFor="group-name">Nome deste orçamento</FieldLabel>
             <Input
               id="group-name"
               name="group-name"
@@ -91,7 +91,7 @@ export function GroupSettings() {
       )}
 
       <section className="flex flex-col gap-3">
-        <h3 className="font-medium">Pessoas</h3>
+        <h3 className="font-medium">Quem compartilha este orçamento</h3>
         {isPending ? (
           <p className="text-muted-foreground text-sm">Carregando…</p>
         ) : (
@@ -132,7 +132,7 @@ export function GroupSettings() {
       )}
 
       <section className="flex flex-col gap-3 border-t pt-6">
-        <h3 className="font-medium">Seus grupos</h3>
+        <h3 className="font-medium">Seus orçamentos</h3>
         <ul className="divide-y rounded-xl border bg-card">
           {(me?.groups ?? []).map((group) => {
             const isActive = group.id === activeGroup?.id
@@ -168,9 +168,9 @@ export function GroupSettings() {
           <Input
             value={newGroupName}
             onChange={(event) => setNewGroupName(event.target.value)}
-            placeholder="Nome de um novo grupo"
+            placeholder="Nome de um novo orçamento"
             autoComplete="off"
-            aria-label="Nome do novo grupo"
+            aria-label="Nome do novo orçamento"
           />
           <Button type="submit" variant="outline" disabled={createGroup.isPending}>
             <Plus />

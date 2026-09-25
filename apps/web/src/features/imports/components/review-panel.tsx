@@ -190,7 +190,7 @@ export function ReviewPanel({
 
   /*
    * A leitura chega de novo o tempo todo — a busca automática traz linhas, outra pessoa do
-   * grupo aprova algo, a janela volta ao foco, a conexão cai e volta. Em nenhum desses casos
+   * orçamento aprova algo, a janela volta ao foco, a conexão cai e volta. Em nenhum desses casos
    * o que a pessoa já decidiu pode ser jogado fora: classificar trinta linhas e ver tudo
    * voltar ao palpite do Bolso é perder trabalho de verdade.
    *
