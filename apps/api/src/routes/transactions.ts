@@ -18,6 +18,7 @@ import type { Database } from '../db/client'
 import { categories, contacts, transactionSplits, transactions, user } from '../db/schema'
 import { type AppEnv, type Deps, HttpError, notify, onInvalid } from '../http'
 import { diferencas, historicoDe, registrar } from '../lib/audit'
+import { devolverParaFila, tirarDaFila } from '../lib/inbox'
 import { accountCycle, cashFields } from '../statements'
 
 type Row = typeof transactions.$inferSelect
@@ -464,7 +465,22 @@ export function transactionsRoutes(deps: Deps) {
           .update(transactions)
           .set(marcarExcluido)
           .where(and(alvo, naoExcluido))
-          .returning({ id: transactions.id, description: transactions.description })
+          .returning({
+            id: transactions.id,
+            description: transactions.description,
+            externalId: transactions.externalId,
+          })
+
+        /*
+         * Veio do banco: a linha volta para a caixa de entrada. Sem isso o movimento sumiria
+         * do app inteiro — nem lançamento, nem linha esperando —, e o banco não avisaria de
+         * novo, porque para ele aquilo já foi entregue.
+         */
+        await devolverParaFila(
+          db,
+          c.var.groupId,
+          excluidos.flatMap((item) => (item.externalId ? [item.externalId] : [])),
+        )
 
         for (const excluido of excluidos) {
           await registrar(db, {
@@ -477,7 +493,7 @@ export function transactionsRoutes(deps: Deps) {
           })
         }
 
-        notify(deps, c, 'transactions')
+        notify(deps, c, 'transactions', 'bank')
         return c.body(null, 204)
       })
 
@@ -530,8 +546,15 @@ export function transactionsRoutes(deps: Deps) {
               isNotNull(transactions.deletedAt),
             ),
           )
-          .returning({ id: transactions.id, description: transactions.description })
+          .returning({
+            id: transactions.id,
+            description: transactions.description,
+            externalId: transactions.externalId,
+          })
         if (!restaurado) throw new HttpError(404, 'Lançamento não encontrado na lixeira.')
+
+        // Voltou a existir: a linha do banco sai da fila, para não aparecer a mesma coisa duas vezes
+        await tirarDaFila(db, c.var.groupId, restaurado.externalId ? [restaurado.externalId] : [])
 
         await registrar(db, {
           groupId: c.var.groupId,
@@ -541,7 +564,7 @@ export function transactionsRoutes(deps: Deps) {
           actorId: c.var.user.id,
           label: restaurado.description,
         })
-        notify(deps, c, 'transactions')
+        notify(deps, c, 'transactions', 'bank')
         return c.body(null, 204)
       })
 

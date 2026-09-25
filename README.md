@@ -734,6 +734,14 @@ vira uma linha em `audit_log` com **o que mudou** — campo, de, para — e quem
 formulário do lançamento, "Ver o histórico" conta a coisa em português: *"Débora alterou
 descrição: Feira → Feira da semana · 12 set, 14:03"*.
 
+**Apagar um lançamento que veio do banco devolve a linha para a caixa de entrada.** A fila é o
+acerto de contas entre o que o banco mandou e o que foi aceito: se o lançamento some, aquela
+linha volta a não ter resposta, e precisa voltar a esperar aprovação — senão o movimento
+sumiria do app inteiro sem ninguém ter decidido nada, e o banco não avisaria de novo, porque
+para ele aquilo já foi entregue. Restaurar o lançamento pela lixeira faz o caminho inverso: a
+linha sai da fila, para a mesma coisa não aparecer duas vezes. Para resolver de vez, é
+**Dispensar**.
+
 **Excluir não apaga.** O lançamento ganha `deleted_at` e some de todas as telas e de todos os
 relatórios na hora, mas continua no banco: a **Lixeira** (no menu de "Novo lançamento") mostra
 o que foi excluído, por quem, e traz de volta exatamente como estava — com as categorias, que

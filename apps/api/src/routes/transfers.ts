@@ -6,6 +6,7 @@ import { Hono } from 'hono'
 import { accounts, transactions } from '../db/schema'
 import { type AppEnv, type Deps, HttpError, notFound, notify, onInvalid } from '../http'
 import { registrar } from '../lib/audit'
+import { devolverParaFila } from '../lib/inbox'
 import { toTransaction } from './transactions'
 
 /*
@@ -146,8 +147,19 @@ export function transfersRoutes(deps: Deps) {
               eq(transactions.transferGroupId, c.req.param('groupId')),
             ),
           )
-          .returning({ id: transactions.id, description: transactions.description })
+          .returning({
+            id: transactions.id,
+            description: transactions.description,
+            externalId: transactions.externalId,
+          })
         if (deleted.length === 0) throw notFound('Transferência')
+
+        // A perna que veio do banco devolve a linha dela para a caixa de entrada
+        await devolverParaFila(
+          db,
+          c.var.groupId,
+          deleted.flatMap((perna) => (perna.externalId ? [perna.externalId] : [])),
+        )
 
         for (const perna of deleted) {
           await registrar(db, {

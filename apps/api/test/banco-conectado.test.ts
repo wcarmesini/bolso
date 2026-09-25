@@ -429,6 +429,41 @@ describe('parcela que vem do banco', () => {
   })
 })
 
+describe('apagar um lançamento que veio do banco', () => {
+  it('a linha do banco volta a esperar aprovação', async () => {
+    const linha = await esperando('vol-1', '2026-09-28', -4500, 'VOLTOU LTDA')
+    const fila = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
+    const alvo = fila.body.rows.find((row) => row.fitId === linha?.id)
+
+    await ana.json(`/api/bank/connections/${conexaoId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({
+        decisions: [{ fitId: alvo?.fitId, action: 'create', categoryId: mercado, contactId: null }],
+      }),
+    })
+
+    const lancamentos = await ana.json<Transaction[]>(
+      '/api/transactions?from=2026-09-01&to=2026-09-30',
+    )
+    const criado = lancamentos.body.find((item) => item.description === 'VOLTOU LTDA')
+    await ana.request(`/api/transactions/${criado?.id}`, { method: 'DELETE' })
+
+    const depois = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
+    const devolvida = depois.body.rows.find((row) => row.description === 'VOLTOU LTDA')
+    expect(devolvida).toBeDefined()
+
+    // Dispensar resolve a linha de vez: ela não volta mais
+    await ana.json(`/api/bank/connections/${conexaoId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({
+        decisions: [{ fitId: devolvida?.fitId, action: 'skip', categoryId: null, contactId: null }],
+      }),
+    })
+    const fim = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
+    expect(fim.body.rows.some((row) => row.description === 'VOLTOU LTDA')).toBe(false)
+  })
+})
+
 describe('histórico de importações', () => {
   it('registra cada aprovação e sabe voltar atrás', async () => {
     // Um lançamento que já existia, para conciliar, e uma linha nova, para criar
