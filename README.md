@@ -781,7 +781,8 @@ linha sai da fila, para a mesma coisa não aparecer duas vezes. Para resolver de
 **Dispensar**.
 
 **Excluir não apaga.** O lançamento ganha `deleted_at` e some de todas as telas e de todos os
-relatórios na hora, mas continua no banco: a **Lixeira** (no menu de "Novo lançamento") mostra
+relatórios na hora, mas continua no banco: a **Lixeira** (o ícone ao lado do filtro de contas,
+em Lançamentos — ela não cria nada, então não mora no menu de lançar) mostra
 o que foi excluído, por quem, e traz de volta exatamente como estava — com as categorias, que
 nunca foram embora. Vale também para a transferência, cujas duas pernas somem e voltam juntas.
 
