@@ -158,10 +158,21 @@ export function ReviewPanel({
   const { data: accounts = [] } = useAccounts()
   const [decisoes, setDecisoes] = useState<Record<string, Decisao>>({})
 
-  // Cada leitura nova recomeça as decisões do palpite do Bolso
+  /*
+   * A leitura chega de novo o tempo todo — a busca automática traz linhas, outra pessoa do
+   * grupo aprova algo, a janela volta ao foco, a conexão cai e volta. Em nenhum desses casos
+   * o que a pessoa já decidiu pode ser jogado fora: classificar trinta linhas e ver tudo
+   * voltar ao palpite do Bolso é perder trabalho de verdade.
+   *
+   * Então **junta** em vez de recomeçar: quem já tem decisão mantém a sua, quem chegou agora
+   * nasce com o palpite, e quem saiu da fila sai daqui também.
+   */
   useEffect(() => {
-    setDecisoes(Object.fromEntries(preview.rows.map((row) => [row.fitId, decisaoPadrao(row)])))
-    setCriados([])
+    setDecisoes((atual) =>
+      Object.fromEntries(
+        preview.rows.map((row) => [row.fitId, atual[row.fitId] ?? decisaoPadrao(row)]),
+      ),
+    )
   }, [preview])
 
   // As despesas são o caso comum; a árvore muda conforme o sinal da linha
@@ -169,20 +180,23 @@ export function ReviewPanel({
   const arvoreReceita = useMemo(() => categoryTree(categories, 'income'), [categories])
 
   /*
-   * Os vínculos vivem nas decisões, não no palpite que veio do servidor: assim trocar um par
-   * atualiza na hora quem está livre e o que ficou sem par, sem nova consulta.
-   */
-  /*
    * Lançamentos que nasceram aqui mesmo, pelo botão de detalhar uma linha. Ficam ao lado dos
-   * que vieram do servidor para a conciliação enxergar os dois sem uma nova consulta.
+   * que vieram do servidor para a conciliação enxergar os dois sem uma nova consulta — e
+   * continuam aqui depois de a leitura chegar de novo, quando o servidor já os devolve: sem
+   * o `Map`, o mesmo lançamento apareceria duas vezes na lista de escolher o par.
    */
   const [criados, setCriados] = useState<ImportMatch[]>([])
   /** A linha que está sendo detalhada no formulário completo */
   const [detalhando, setDetalhando] = useState<ImportRow | null>(null)
   const todosDisponiveis = useMemo(
-    () => [...criados, ...preview.available],
+    () => [...new Map([...criados, ...preview.available].map((item) => [item.id, item])).values()],
     [criados, preview.available],
   )
+
+  /*
+   * Os vínculos vivem nas decisões, não no palpite que veio do servidor: assim trocar um par
+   * atualiza na hora quem está livre e o que ficou sem par, sem nova consulta.
+   */
 
   const emUso = useMemo(() => {
     const mapa = new Map<string, { fitId: string; rotulo: string; amountCents: number }[]>()

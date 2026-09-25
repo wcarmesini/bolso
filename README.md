@@ -287,6 +287,12 @@ um `connectToken` de 30 minutos), e cada busca reconfere os **últimos 7 dias** 
 ainda não viu, porque banco mexe no que mandou há pouco (muda a descrição, ajusta o valor de
 uma compra internacional).
 
+**Classificar não se perde.** A leitura da fila chega de novo o tempo todo — a busca
+automática traz linhas, outra pessoa do grupo aprova algo, a janela volta ao foco, a conexão
+cai e volta. Em nenhum desses casos o que já foi decidido pode sumir: a tela **junta** a
+leitura nova com o que está na mão, em vez de recomeçar. Quem já tem decisão mantém a sua,
+quem chegou agora nasce com o palpite do Bolso, e quem saiu da fila sai daqui também.
+
 **Depois × Dispensar.** São coisas diferentes, e a tela diz qual é qual. *Depois* deixa a
 linha como está: ela não entra na confirmação e continua esperando na próxima vez. *Dispensar*
 resolve a linha para sempre — sai da fila e não volta, porque aquilo não interessa. No extrato
