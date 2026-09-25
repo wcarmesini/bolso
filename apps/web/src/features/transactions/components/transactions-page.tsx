@@ -36,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAccounts } from '@/features/accounts/queries'
 import { useMe } from '@/features/auth/queries'
 import { CategoryBadge } from '@/features/categories/components/category-badge'
@@ -434,19 +435,28 @@ function TransactionRow({
           )}
         </span>
         {(details.length > 0 || transaction.sources.length > 0) && (
-          <span className="flex items-center gap-1 text-muted-foreground text-xs">
+          <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
             {details.length > 0 && <span className="truncate">{details.join(' · ')}</span>}
             {/*
              * O selo de conferência: este número não é só o que alguém digitou, é o que o
-             * banco confirmou. Vai com o ícone de vínculo e o nome da origem — e com as
-             * duas, quando o mesmo movimento chegou pelos dois caminhos.
+             * banco confirmou. Na linha ele é só o vínculo em azul — em cada lançamento
+             * conciliado o texto seria o mesmo, e repetido vira ruído. De onde vem a
+             * conciliação está a um hover de distância, e no rótulo para quem não tem hover.
              */}
             {transaction.sources.length > 0 && (
-              <span className="flex shrink-0 items-center gap-1">
-                {details.length > 0 && <span aria-hidden>·</span>}
-                <Link2 className="size-3" />
-                Conciliado via {reconciliationLabel(transaction.sources)}
-              </span>
+              <Tooltip>
+                <TooltipTrigger
+                  render={<span />}
+                  role="img"
+                  aria-label={`Conciliado via ${reconciliationLabel(transaction.sources)}`}
+                  className="shrink-0 text-blue-600 dark:text-blue-400"
+                >
+                  <Link2 className="size-3.5" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  Conciliado via {reconciliationLabel(transaction.sources)}
+                </TooltipContent>
+              </Tooltip>
             )}
           </span>
         )}
