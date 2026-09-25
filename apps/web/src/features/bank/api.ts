@@ -5,6 +5,7 @@ import type {
   ImportDecision,
   ImportPreview,
   ImportResult,
+  PendingDecision,
 } from '@bolso/shared'
 import { api } from '@/lib/api-client'
 
@@ -74,4 +75,12 @@ export function getDismissed(id: string) {
 
 export function undismiss(id: string, ids: string[]) {
   return api<void>(`/bank/connections/${id}/undismiss`, { method: 'POST', body: { ids } })
+}
+
+/** Guarda o que já foi decidido, sem aplicar: o trabalho não vive só na tela */
+export function saveDecisions(
+  id: string,
+  decisions: { id: string; decision: PendingDecision | null }[],
+) {
+  return api<void>(`/bank/connections/${id}/decisions`, { method: 'PUT', body: { decisions } })
 }

@@ -7,6 +7,7 @@ import {
   getDismissed,
   linkBankAccounts,
   removeBankConnection,
+  saveDecisions,
   syncBankConnection,
   undismiss,
   updateBankConnection,
@@ -84,5 +85,21 @@ export function useUndismiss() {
   return useMutation({
     mutationFn: ({ id, ids }: { id: string; ids: string[] }) => undismiss(id, ids),
     onSuccess: recarregar,
+  })
+}
+
+/*
+ * Guardar a decisão não recarrega a fila: a tela já sabe o que escolheu, e recarregar a cada
+ * clique faria a lista piscar. O que está no banco serve para quando alguém voltar.
+ */
+export function useSaveDecisions() {
+  return useMutation({
+    mutationFn: ({
+      id,
+      decisions,
+    }: {
+      id: string
+      decisions: Parameters<typeof saveDecisions>[1]
+    }) => saveDecisions(id, decisions),
   })
 }

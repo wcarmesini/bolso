@@ -10,6 +10,7 @@ import {
   useApproveBankPending,
   useBank,
   useBankPending,
+  useSaveDecisions,
   useSyncBankConnection,
 } from '@/features/bank/queries'
 import { errorMessage } from '@/lib/errors'
@@ -41,6 +42,7 @@ export function BankInbox() {
   const [vendoDispensados, setVendoDispensados] = useState(false)
   const sincronizar = useSyncBankConnection()
   const aprovar = useApproveBankPending()
+  const guardar = useSaveDecisions()
 
   const conexoes = data?.connections ?? []
 
@@ -67,15 +69,20 @@ export function BankInbox() {
     }
   }
 
-  /** Uma linha resolvida sozinha (o botão de detalhar): some da fila na hora */
-  const resolverUma = async (decision: ImportDecision) => {
+  /*
+   * O que já foi decidido vai para o banco a cada clique. Falhar aqui não desfaz nada na
+   * tela: a pessoa continua vendo o que escolheu, e o aviso diz que o rascunho não foi
+   * guardado — clicar de novo resolve.
+   */
+  const guardarDecisoes = (decisions: Parameters<typeof guardar.mutate>[0]['decisions']) => {
     if (!conexao) return
-    try {
-      await aprovar.mutateAsync({ id: conexao.id, decisions: [decision] })
-      toast.success('Lançamento salvo e conciliado')
-    } catch (cause) {
-      toast.error(errorMessage(cause, 'Não foi possível conciliar.'))
-    }
+    guardar.mutate(
+      { id: conexao.id, decisions },
+      {
+        onError: (cause) =>
+          toast.error(errorMessage(cause, 'Não foi possível guardar a classificação.')),
+      },
+    )
   }
 
   const confirmar = async (decisions: ImportDecision[]) => {
@@ -191,7 +198,7 @@ export function BankInbox() {
           textos={textosDoBanco}
           salvando={aprovar.isPending}
           onConfirmar={confirmar}
-          onResolverUma={resolverUma}
+          onGuardar={guardarDecisoes}
           resumo={
             <p className="text-muted-foreground text-xs">
               {[conexao?.connectorName, conexao?.externalAccountName, conexao?.accountName]

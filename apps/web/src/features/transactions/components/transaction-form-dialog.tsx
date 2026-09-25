@@ -91,6 +91,14 @@ type TransactionFormDialogProps = {
   initialValues?: Partial<TransactionFormValues> | null
   /** Avisa quem abriu qual lançamento nasceu, para ele seguir o fluxo dele */
   onSaved?: (transaction: Transaction) => void
+  /*
+   * Em vez de salvar, devolve o que foi preenchido. É o que permite detalhar uma linha do
+   * banco sem criar lançamento nenhum: o preenchimento vira rascunho, e o lançamento só
+   * nasce quando a pessoa aprovar a fila inteira.
+   */
+  onSubmitValues?: (values: TransactionFormValues) => void
+  /** Trava valor, conta e tipo mesmo sem conciliação (a linha do banco é que manda neles) */
+  lockKeyFields?: boolean
 }
 
 /**
@@ -110,6 +118,8 @@ export function TransactionFormDialog({
   defaultType = 'expense',
   initialValues = null,
   onSaved,
+  onSubmitValues,
+  lockKeyFields = false,
 }: TransactionFormDialogProps) {
   const saveTransaction = useSaveTransaction()
   const [scope, setScope] = useState<EditScope>('one')
@@ -157,6 +167,12 @@ export function TransactionFormDialog({
   }, [getValues, setValue])
 
   const submit = handleSubmit(async (values) => {
+    // Rascunho: quem abriu cuida do que fazer com isso, e nada vai para o banco agora
+    if (onSubmitValues) {
+      onSubmitValues(values)
+      onOpenChange(false)
+      return
+    }
     try {
       const salvo = await saveTransaction.mutateAsync({ id: transaction?.id, values, scope })
       onOpenChange(false)
@@ -186,7 +202,7 @@ export function TransactionFormDialog({
   })
 
   const series = transaction?.installment ?? null
-  const travado = isReconciled(transaction?.sources)
+  const travado = lockKeyFields || isReconciled(transaction?.sources)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

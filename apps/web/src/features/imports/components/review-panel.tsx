@@ -4,6 +4,8 @@ import {
   type ImportPreview,
   type ImportRow,
   importActions,
+  type PendingDecision,
+  type PendingDraft,
 } from '@bolso/shared'
 import {
   ArrowLeftRight,
@@ -65,6 +67,10 @@ export type Decisao = {
   transactionId: string | null
   /** Na transferência: a outra conta, para onde o dinheiro foi ou de onde veio */
   counterAccountId: string | null
+  /** Só o formulário completo preenche: o seletor da linha não tem contato */
+  contactId: string | null
+  /** O que o formulário completo preencheu, quando a pessoa detalhou a linha */
+  draft: PendingDraft | null
 }
 
 const IMPORTAR = { value: 'create', label: 'Importar', icon: Plus } as const
@@ -82,12 +88,28 @@ const DEPOIS = {
 const acaoPadrao = (row: ImportRow): AcaoDaLinha =>
   row.status === 'new' ? 'create' : row.status === 'match' ? 'link' : 'skip'
 
-const decisaoPadrao = (row: ImportRow): Decisao => ({
-  action: acaoPadrao(row),
-  categoryId: null,
-  transactionId: row.status === 'match' ? (row.match?.id ?? null) : null,
-  counterAccountId: null,
-})
+/*
+ * O que a linha mostra ao abrir: o que já foi decidido e está guardado no banco; e, se
+ * ninguém decidiu ainda, o palpite do Bolso.
+ */
+const decisaoPadrao = (row: ImportRow): Decisao =>
+  row.decision
+    ? {
+        action: row.decision.action,
+        categoryId: row.decision.categoryId,
+        transactionId: row.decision.transactionId,
+        counterAccountId: row.decision.counterAccountId,
+        contactId: row.decision.contactId,
+        draft: row.decision.draft,
+      }
+    : {
+        action: acaoPadrao(row),
+        categoryId: null,
+        transactionId: row.status === 'match' ? (row.match?.id ?? null) : null,
+        counterAccountId: null,
+        contactId: null,
+        draft: null,
+      }
 
 export type TextosDaConferencia = {
   /** "Importar" (arquivo) ou "Aprovar" (banco conectado) */
@@ -149,7 +171,8 @@ type ReviewPanelProps = {
    * conectado). É o que faz o botão de detalhar terminar o serviço: quem preencheu o
    * formulário inteiro e salvou já disse o que queria daquela linha.
    */
-  onResolverUma?: (decision: ImportDecision) => Promise<void>
+  /** Guarda o rascunho da decisão no banco (só existe onde há fila guardada) */
+  onGuardar?: (decisions: { id: string; decision: PendingDecision | null }[]) => void
 }
 
 export function ReviewPanel({
@@ -159,7 +182,7 @@ export function ReviewPanel({
   resumo,
   salvando,
   onConfirmar,
-  onResolverUma,
+  onGuardar,
 }: ReviewPanelProps) {
   const { data: categories = [] } = useCategories()
   const { data: accounts = [] } = useAccounts()
@@ -186,19 +209,9 @@ export function ReviewPanel({
   const arvoreDespesa = useMemo(() => categoryTree(categories, 'expense'), [categories])
   const arvoreReceita = useMemo(() => categoryTree(categories, 'income'), [categories])
 
-  /*
-   * Lançamentos que nasceram aqui mesmo, pelo botão de detalhar uma linha. Ficam ao lado dos
-   * que vieram do servidor para a conciliação enxergar os dois sem uma nova consulta — e
-   * continuam aqui depois de a leitura chegar de novo, quando o servidor já os devolve: sem
-   * o `Map`, o mesmo lançamento apareceria duas vezes na lista de escolher o par.
-   */
-  const [criados, setCriados] = useState<ImportMatch[]>([])
   /** A linha que está sendo detalhada no formulário completo */
   const [detalhando, setDetalhando] = useState<ImportRow | null>(null)
-  const todosDisponiveis = useMemo(
-    () => [...new Map([...criados, ...preview.available].map((item) => [item.id, item])).values()],
-    [criados, preview.available],
-  )
+  const todosDisponiveis = preview.available
 
   /*
    * Os vínculos vivem nas decisões, não no palpite que veio do servidor: assim trocar um par
@@ -270,6 +283,29 @@ export function ReviewPanel({
     [divisoes],
   )
 
+  /*
+   * Toda escolha é guardada no banco na hora. Não recarrega a fila — a tela já sabe o que
+   * escolheu —, mas quem sair da página e voltar (ou deslogar) encontra o trabalho onde
+   * parou. Falhar ao guardar não desfaz nada na tela: o aviso já apareceu, e insistir
+   * bastaria clicar de novo.
+   */
+  const guardar = (mudados: Record<string, Decisao>) => {
+    if (!onGuardar) return
+    onGuardar(
+      Object.entries(mudados).map(([fitId, decisao]) => ({
+        id: fitId,
+        decision: {
+          action: decisao.action,
+          categoryId: decisao.categoryId,
+          contactId: decisao.contactId,
+          counterAccountId: decisao.counterAccountId,
+          transactionId: decisao.transactionId,
+          draft: decisao.draft,
+        },
+      })),
+    )
+  }
+
   const mudarDecisao = (fitId: string, mudanca: Partial<Decisao>) =>
     setDecisoes((atual) => {
       const anterior: Decisao = atual[fitId] ?? {
@@ -277,8 +313,12 @@ export function ReviewPanel({
         categoryId: null,
         transactionId: null,
         counterAccountId: null,
+        contactId: null,
+        draft: null,
       }
-      return { ...atual, [fitId]: { ...anterior, ...mudanca } }
+      const nova = { ...anterior, ...mudanca }
+      guardar({ [fitId]: nova })
+      return { ...atual, [fitId]: nova }
     })
 
   /*
@@ -302,10 +342,18 @@ export function ReviewPanel({
         categoryId: null,
         transactionId: null,
         counterAccountId: null,
+        contactId: null,
+        draft: null,
       }
       proximo[fitId] = transactionId
         ? { ...anterior, action: 'link', transactionId }
         : { ...anterior, action: 'create', transactionId: null }
+      // O que mudou aqui pode ser mais de uma linha: quem perdeu o par também foi mexido
+      guardar(
+        Object.fromEntries(
+          Object.entries(proximo).filter(([id, decisao]) => decisao !== atual[id]),
+        ),
+      )
       return proximo
     })
 
@@ -326,7 +374,7 @@ export function ReviewPanel({
             transactionId:
               decisao.action === 'link' ? (decisao.transactionId ?? undefined) : undefined,
             categoryId: decisao.action === 'create' ? decisao.categoryId : null,
-            contactId: null,
+            contactId: decisao.action === 'create' ? decisao.contactId : null,
             counterAccountId: decisao.action === 'transfer' ? decisao.counterAccountId : null,
           }
         }),
@@ -438,45 +486,29 @@ export function ReviewPanel({
               }
             : null
         }
-        onSaved={(salvo) => {
+        lockKeyFields
+        /*
+         * Detalhar não cria nada: o preenchimento vira **rascunho** da decisão. O lançamento
+         * nasce quando a pessoa aprovar a fila — uma vez, num lote só. Criar ali na hora
+         * enchia o histórico de importações de lotes de uma linha, e deixava lançamento solto
+         * quando a confirmação não vinha.
+         */
+        onSubmitValues={(values) => {
           const linha = detalhando
           if (!linha) return
-          const conciliada: ImportDecision = {
-            fitId: linha.fitId,
-            action: 'link',
-            transactionId: salvo.id,
-            categoryId: null,
-            contactId: null,
-            counterAccountId: null,
-          }
-
-          /*
-           * Com fila guardada (banco conectado), salvar aqui **termina** a linha: ela sai da
-           * fila e o lançamento nasce já conciliado. Antes ficava só uma marcação na tela, e
-           * quem não apertasse "Aprovar" acabava com o lançamento solto e a linha esperando —
-           * dois sinais de que algo ficou pela metade.
-           */
-          if (onResolverUma) {
-            void onResolverUma(conciliada)
-            return
-          }
-
-          // No extrato não há fila guardada: a marcação vale até a confirmação do arquivo
-          setCriados((atual) => [
-            {
-              id: salvo.id,
-              description: salvo.description,
-              purchaseDate: salvo.purchaseDate,
-              amountCents: salvo.amountCents,
-              categoryName: null,
-              type: salvo.type,
+          mudarDecisao(linha.fitId, {
+            action: 'create',
+            contactId: values.contactId,
+            categoryId: values.splits.length === 1 ? (values.splits[0]?.categoryId ?? null) : null,
+            draft: {
+              description: values.description,
+              purchaseDate: values.purchaseDate,
+              paymentDate: values.paymentDate,
+              notes: '',
+              splits: values.splits,
             },
-            ...atual,
-          ])
-          setDecisoes((atual) => ({
-            ...atual,
-            [linha.fitId]: { ...(atual[linha.fitId] ?? decisaoPadrao(linha)), ...conciliada },
-          }))
+          })
+          setDetalhando(null)
         }}
       />
 
@@ -620,10 +652,16 @@ function Linha({
     >
       <div className="flex items-baseline justify-between gap-3">
         <span className="min-w-0">
-          <span className="block truncate text-sm">{row.description || '—'}</span>
+          {/* Detalhada: o que vale é o que a pessoa escreveu, e o texto do banco vira nota */}
+          <span className="block truncate text-sm">
+            {decisao.draft?.description || row.description || '—'}
+          </span>
           <span className="block truncate text-muted-foreground text-xs">
             {[
               shortDate(row.date),
+              decisao.draft && decisao.draft.description !== row.description
+                ? `no banco: ${row.description}`
+                : null,
               row.kind,
               /*
                * A parcela precisa aparecer aqui: o valor desta linha é de uma prestação, mas

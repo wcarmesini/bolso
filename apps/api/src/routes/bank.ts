@@ -6,6 +6,8 @@ import {
   type ImportPreview,
   type ImportResult,
   importDecisionSchema,
+  type PendingDecision,
+  saveDecisionsSchema,
 } from '@bolso/shared'
 import { zValidator } from '@hono/zod-validator'
 import { and, count, desc, eq, inArray } from 'drizzle-orm'
@@ -245,6 +247,7 @@ export function bankRoutes(deps: Deps) {
           amountCents: row.amountCents,
           description: row.description,
           kind: row.kind,
+          decision: (row.decision as PendingDecision | null) ?? null,
           installment:
             row.installmentNumber && row.installmentCount && row.purchaseDate
               ? {
@@ -341,6 +344,36 @@ export function bankRoutes(deps: Deps) {
         notify(deps, c, 'bank')
         return c.body(null, 204)
       })
+
+      /*
+       * Guarda o que já foi decidido, sem aplicar nada. É o que faz classificar cem linhas
+       * sobreviver a sair da tela, deslogar ou o navegador fechar: o trabalho mora no banco,
+       * não na memória da página. Nada disso vira lançamento antes de "Aprovar".
+       */
+      .put(
+        '/connections/:id/decisions',
+        zValidator('json', saveDecisionsSchema, onInvalid),
+        async (c) => {
+          const conexao = await daConexao(c.var.groupId, c.req.param('id'))
+          const { decisions } = c.req.valid('json')
+
+          await db.transaction(async (tx) => {
+            for (const { id, decision } of decisions) {
+              await tx
+                .update(pendingTransactions)
+                .set({ decision, updatedAt: new Date() })
+                .where(
+                  and(
+                    eq(pendingTransactions.id, id),
+                    eq(pendingTransactions.connectionId, conexao.id),
+                    eq(pendingTransactions.status, 'pending'),
+                  ),
+                )
+            }
+          })
+          return c.body(null, 204)
+        },
+      )
 
       // Aprovar: cada linha vira lançamento, gruda num que já existia, ou é dispensada
       .post(
@@ -456,12 +489,21 @@ export function bankRoutes(deps: Deps) {
                 })
                 result.transferred += 1
               } else if (decision.action === 'create') {
+                /*
+                 * Detalhou a linha no formulário completo? O rascunho manda no que ele
+                 * preencheu — descrição, datas, partes. O valor e a conta continuam vindo do
+                 * banco: são eles que identificam o movimento, e mudá-los desfaria a prova.
+                 */
+                const rascunho = (linha.decision as PendingDecision | null)?.draft ?? null
                 const transactionId = await criarLancamento(
                   tx,
                   contexto,
-                  linha,
+                  rascunho
+                    ? { ...linha, description: rascunho.description || linha.description }
+                    : linha,
                   decision.categoryId,
                   decision.contactId,
+                  rascunho,
                 )
                 itens.push({
                   action: 'create',

@@ -62,6 +62,8 @@ export const tipoDe = (amountCents: number) => (amountCents < 0 ? 'expense' : 'i
 
 /** Uma linha vinda de fora: do extrato ou da caixa de entrada do banco */
 export type LinhaDeFora = {
+  /** O rascunho da decisão, quando a linha vem de uma fila guardada */
+  decision?: ImportRow['decision']
   fitId: string
   date: string
   /** Negativo = saída */
@@ -204,14 +206,15 @@ export function conciliar(
   }
 
   const rows = linhas.map((item): ImportRow => {
+    const comum = { decision: null, ...item }
     const jaImportado = porExternalId.get(item.fitId)
     if (jaImportado) {
-      return { ...item, status: 'imported', match: comoMatch(jaImportado), candidates: [] }
+      return { ...comum, status: 'imported', match: comoMatch(jaImportado), candidates: [] }
     }
     const escolhido = escolhidoDe.get(item.fitId)
     const candidates = candidatosDe.get(item.fitId) ?? []
-    if (!escolhido) return { ...item, status: 'new', match: null, candidates }
-    return { ...item, status: 'match', match: comoMatch(escolhido), candidates }
+    if (!escolhido) return { ...comum, status: 'new', match: null, candidates }
+    return { ...comum, status: 'match', match: comoMatch(escolhido), candidates }
   })
 
   /*

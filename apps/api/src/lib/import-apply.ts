@@ -41,6 +41,8 @@ type Linha = {
   merchant?: string | null
 }
 
+type Parte = { categoryId: string | null; amountCents: number }
+
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0]
 
 export async function criarLancamento(
@@ -49,11 +51,26 @@ export async function criarLancamento(
   linha: Linha,
   categoryId: string | null,
   contactId: string | null,
+  /*
+   * O que a pessoa preencheu no formulário completo, quando detalhou a linha. Vale para a
+   * descrição, as datas e a divisão em categorias — não para o valor nem para a conta, que
+   * são o que identifica o movimento no banco.
+   */
+  rascunho: {
+    purchaseDate: string
+    paymentDate: string | null
+    notes: string
+    splits: Parte[]
+  } | null = null,
 ) {
   const amountCents = Math.abs(linha.amountCents)
   const parcela = await serieDaParcela(tx, contexto, linha)
-  // A compra aconteceu na data da compra; o dinheiro sai na data que o banco deu à parcela
-  const purchaseDate = parcela?.purchaseDate ?? linha.date
+  /*
+   * Onde o gasto aconteceu. A parcela manda primeiro (a compra é de outro mês); depois o que
+   * a pessoa corrigiu no formulário; e, no fim, a data que o banco deu à linha. O caixa é
+   * outra conta: continua saindo da data do banco, que é quando o dinheiro se move.
+   */
+  const purchaseDate = parcela?.purchaseDate ?? rascunho?.purchaseDate ?? linha.date
 
   const [created] = await tx
     .insert(transactions)
@@ -82,12 +99,18 @@ export async function criarLancamento(
     label: linha.description,
     userId: contexto.userId,
   })
-  await tx.insert(transactionSplits).values({
-    groupId: contexto.groupId,
-    transactionId: created.id,
-    categoryId,
-    amountCents,
-  })
+  const partes =
+    rascunho && rascunho.splits.length > 0
+      ? rascunho.splits.map((parte) => ({ ...parte, amountCents: Math.abs(parte.amountCents) }))
+      : [{ categoryId, amountCents }]
+  await tx.insert(transactionSplits).values(
+    partes.map((parte) => ({
+      groupId: contexto.groupId,
+      transactionId: created.id,
+      categoryId: parte.categoryId,
+      amountCents: parte.amountCents,
+    })),
+  )
   return created.id
 }
 

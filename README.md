@@ -287,6 +287,17 @@ um `connectToken` de 30 minutos), e cada busca reconfere os **últimos 7 dias** 
 ainda não viu, porque banco mexe no que mandou há pouco (muda a descrição, ajusta o valor de
 uma compra internacional).
 
+**A classificação mora no banco, não na tela.** Cada escolha — categoria, "Depois",
+"Dispensar", o par de uma conciliação, o formulário completo — é guardada em
+`pending_transactions.decision` na hora, como **rascunho**. Nada disso vira lançamento antes
+de "Aprovar": não entra em relatório, não aparece na lista de lançamentos, não mexe em saldo.
+Serve para sair da tela, fechar o navegador ou deslogar e encontrar o trabalho onde parou.
+
+É por isso que **detalhar não cria nada**: o formulário completo preenche o rascunho da linha,
+e o lançamento nasce junto com os outros quando a fila é aprovada — um lote só no histórico, e
+nunca um lançamento solto esperando uma confirmação que não veio. No formulário, valor, conta e
+tipo ficam travados: são o que identifica o movimento que o banco mandou.
+
 **Classificar não se perde.** A leitura da fila chega de novo o tempo todo — a busca
 automática traz linhas, outra pessoa do grupo aprova algo, a janela volta ao foco, a conexão
 cai e volta. Em nenhum desses casos o que já foi decidido pode sumir: a tela **junta** a

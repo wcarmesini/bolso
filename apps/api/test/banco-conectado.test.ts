@@ -538,6 +538,96 @@ describe('parcela lida do texto', () => {
   })
 })
 
+describe('rascunho da classificação', () => {
+  it('guarda o que foi decidido, devolve ao voltar e aplica ao aprovar', async () => {
+    const linha = await esperando('rasc-1', '2026-09-26', -4500, 'POSTO XYZ')
+
+    const guardou = await ana.request(`/api/bank/connections/${conexaoId}/decisions`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        decisions: [
+          {
+            id: linha?.id,
+            decision: {
+              action: 'create',
+              categoryId: mercado,
+              contactId: null,
+              counterAccountId: null,
+              transactionId: null,
+              draft: {
+                description: 'Gasolina da viagem',
+                purchaseDate: '2026-09-24',
+                paymentDate: '2026-09-26',
+                notes: '',
+                splits: [{ categoryId: mercado, amountCents: 4500 }],
+              },
+            },
+          },
+        ],
+      }),
+    })
+    expect(guardou.status).toBe(204)
+
+    // Nada virou lançamento: o rascunho não aparece em lugar nenhum além da fila
+    const nada = await ana.json<Transaction[]>('/api/transactions?from=2026-09-24&to=2026-09-30')
+    expect(nada.body.some((item) => item.description === 'Gasolina da viagem')).toBe(false)
+
+    // Voltando à fila, a decisão está lá
+    const fila = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
+    const daLinha = fila.body.rows.find((row) => row.fitId === linha?.id)
+    expect(daLinha?.decision).toMatchObject({
+      action: 'create',
+      categoryId: mercado,
+      draft: { description: 'Gasolina da viagem', purchaseDate: '2026-09-24' },
+    })
+
+    // Aprovando, o lançamento nasce com o que foi preenchido
+    await ana.json(`/api/bank/connections/${conexaoId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({
+        decisions: [{ fitId: linha?.id, action: 'create', categoryId: mercado, contactId: null }],
+      }),
+    })
+    const depois = await ana.json<Transaction[]>('/api/transactions?from=2026-09-20&to=2026-09-30')
+    const criado = depois.body.find((item) => item.description === 'Gasolina da viagem')
+    expect(criado?.purchaseDate).toBe('2026-09-24')
+    expect(criado?.amountCents).toBe(4500)
+    expect(criado?.splits).toEqual([{ categoryId: mercado, amountCents: 4500 }])
+  })
+
+  it('não guarda rascunho em linha já resolvida', async () => {
+    const linha = await esperando('rasc-2', '2026-09-27', -1000, 'JA RESOLVIDA')
+    await ana.json(`/api/bank/connections/${conexaoId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({
+        decisions: [{ fitId: linha?.id, action: 'skip', categoryId: null, contactId: null }],
+      }),
+    })
+
+    const resposta = await ana.request(`/api/bank/connections/${conexaoId}/decisions`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        decisions: [
+          {
+            id: linha?.id,
+            decision: {
+              action: 'create',
+              categoryId: null,
+              contactId: null,
+              counterAccountId: null,
+              transactionId: null,
+              draft: null,
+            },
+          },
+        ],
+      }),
+    })
+    expect(resposta.status).toBe(204)
+    const fila = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
+    expect(fila.body.rows.some((row) => row.fitId === linha?.id)).toBe(false)
+  })
+})
+
 describe('histórico de importações', () => {
   it('registra cada aprovação e sabe voltar atrás', async () => {
     // Um lançamento que já existia, para conciliar, e uma linha nova, para criar

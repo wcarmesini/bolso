@@ -217,6 +217,12 @@ export const pendingTransactions = pgTable(
     merchant: text('merchant'),
     /** O lançamento inteiro, como o banco mandou: nada do que veio se perde na leitura */
     raw: jsonb('raw').$type<Record<string, unknown>>(),
+    /*
+     * O rascunho da decisão: o que a pessoa já escolheu para esta linha antes de confirmar.
+     * Fica aqui, e não na memória da tela, para sair da página (ou deslogar) não apagar o
+     * trabalho. Nada disso vira lançamento antes de "Aprovar".
+     */
+    decision: jsonb('decision').$type<Record<string, unknown>>(),
     /** pending | dismissed */
     status: text('status').notNull().default('pending'),
     ...timestamps,

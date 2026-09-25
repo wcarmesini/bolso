@@ -43,6 +43,11 @@ export type ImportRow = {
    * fatura. A tela mostra as duas coisas, para ninguém achar que o Bolso errou o mês.
    */
   installment: { number: number; count: number; purchaseDate: string } | null
+  /*
+   * O que já foi decidido para esta linha e está guardado no banco. É o que devolve o
+   * trabalho de quem classificou e saiu da tela — ou deslogou — sem confirmar.
+   */
+  decision: PendingDecision | null
   status: ImportRowStatus
   /** No "match", o lançamento parecido; no "imported", o que já veio deste extrato */
   match: ImportMatch | null
@@ -91,6 +96,44 @@ export type ImportPreview = {
  *   vira uma transferência de duas pernas, sem categoria e fora dos relatórios
  * - skip: fica de fora
  */
+/*
+ * A decisão de uma linha, guardada no banco enquanto a pessoa classifica.
+ *
+ * Classificar cem linhas é trabalho de verdade, e trabalho de verdade não pode viver só na
+ * memória da tela: sair da página, deslogar, o navegador fechar — nada disso pode apagar o
+ * que já foi decidido. Nada disso vira lançamento antes de "Aprovar": não entra em relatório
+ * nem na lista de lançamentos. É um rascunho, e só.
+ */
+export const pendingDraftSchema = z.object({
+  description: z.string().trim().max(120),
+  purchaseDate: z.iso.date('Data inválida'),
+  paymentDate: z.iso.date('Data inválida').nullable(),
+  notes: z.string().trim().max(500).default(''),
+  splits: z
+    .array(z.object({ categoryId: z.uuid().nullable(), amountCents: z.number().int() }))
+    .max(20)
+    .default([]),
+})
+export type PendingDraft = z.infer<typeof pendingDraftSchema>
+
+export const pendingDecisionSchema = z.object({
+  action: z.enum(['create', 'link', 'transfer', 'skip', 'later']),
+  categoryId: z.uuid().nullable().default(null),
+  contactId: z.uuid().nullable().default(null),
+  counterAccountId: z.uuid().nullable().default(null),
+  transactionId: z.uuid().nullable().default(null),
+  /** O que o formulário completo preencheu, quando a pessoa detalhou a linha */
+  draft: pendingDraftSchema.nullable().default(null),
+})
+export type PendingDecision = z.infer<typeof pendingDecisionSchema>
+
+export const saveDecisionsSchema = z.object({
+  decisions: z
+    .array(z.object({ id: z.uuid(), decision: pendingDecisionSchema.nullable() }))
+    .min(1)
+    .max(500),
+})
+
 export const importActions = ['create', 'link', 'transfer', 'skip'] as const
 export type ImportAction = (typeof importActions)[number]
 
