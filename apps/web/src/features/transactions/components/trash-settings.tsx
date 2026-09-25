@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/empty-state'
 import { SectionHeader } from '@/components/section-header'
 import { Button } from '@/components/ui/button'
 import { useAccounts } from '@/features/accounts/queries'
+import { usePodeEditar } from '@/lib/access'
 import { shortDate } from '@/lib/dates'
 import { errorMessage } from '@/lib/errors'
 import { amountTone, formatSignedCents } from '../amount'
@@ -33,6 +34,7 @@ export function TrashSettings() {
   const { data: excluidos = [], isPending, isError } = useDeletedTransactions()
   const { data: accounts = [] } = useAccounts()
   const restaurar = useRestoreTransaction()
+  const podeEditar = usePodeEditar()
 
   const voltar = async (id: string, descricao: string) => {
     try {
@@ -47,7 +49,11 @@ export function TrashSettings() {
     <>
       <SectionHeader
         title="Lixeira"
-        description="O que foi excluído continua aqui. Restaurar devolve o lançamento como ele estava."
+        description={
+          podeEditar
+            ? 'O que foi excluído continua aqui. Restaurar devolve o lançamento como ele estava.'
+            : 'O que foi excluído continua aqui. Restaurar depende de poder editar o orçamento.'
+        }
       />
 
       {isError ? (
@@ -84,16 +90,19 @@ export function TrashSettings() {
               <span className={`shrink-0 text-sm tabular-nums ${amountTone[item.type]}`}>
                 {formatSignedCents(item.type, item.amountCents)}
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0 text-muted-foreground"
-                disabled={restaurar.isPending}
-                onClick={() => void voltar(item.id, item.description)}
-              >
-                <Undo2 />
-                Restaurar
-              </Button>
+              {/* Restaurar traz o lançamento de volta para as telas: é escrita */}
+              {podeEditar && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0 text-muted-foreground"
+                  disabled={restaurar.isPending}
+                  onClick={() => void voltar(item.id, item.description)}
+                >
+                  <Undo2 />
+                  Restaurar
+                </Button>
+              )}
             </li>
           ))}
         </ul>

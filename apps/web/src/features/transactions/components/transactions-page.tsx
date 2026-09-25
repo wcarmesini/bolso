@@ -44,6 +44,7 @@ import { useContacts } from '@/features/contacts/queries'
 import { TransferFormDialog } from '@/features/transfers/components/transfer-form-dialog'
 import { useDeleteTransfer } from '@/features/transfers/queries'
 import { useRemembered } from '@/hooks/use-remembered'
+import { usePodeEditar } from '@/lib/access'
 import { currentMonth, dayLabel, shortMonthLabel, today } from '@/lib/dates'
 import { formatCents } from '@/lib/money'
 import { amountTone, formatSignedCents } from '../amount'
@@ -113,6 +114,7 @@ export function TransactionsPage() {
     isError,
   } = useTransactions({ month, accountId, view })
 
+  const podeEditar = usePodeEditar()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [cloning, setCloning] = useState<Transaction | null>(null)
@@ -206,17 +208,19 @@ export function TransactionsPage() {
                 </SelectContent>
               </Select>
             )}
-            <MenuDeLancar
-              onNovo={openNew}
-              onTransferir={abrirTransferencia}
-              gatilho={
-                <Button className="hidden md:inline-flex">
-                  <Plus />
-                  Novo lançamento
-                  <ChevronDown className="opacity-70" />
-                </Button>
-              }
-            />
+            {podeEditar && (
+              <MenuDeLancar
+                onNovo={openNew}
+                onTransferir={abrirTransferencia}
+                gatilho={
+                  <Button className="hidden md:inline-flex">
+                    <Plus />
+                    Novo lançamento
+                    <ChevronDown className="opacity-70" />
+                  </Button>
+                }
+              />
+            )}
           </div>
         </div>
 
@@ -288,19 +292,21 @@ export function TransactionsPage() {
       </PageBody>
 
       {/* No celular o botão fica ao alcance do polegar, acima das abas, e abre o mesmo menu */}
-      <MenuDeLancar
-        onNovo={openNew}
-        onTransferir={abrirTransferencia}
-        gatilho={
-          <Button
-            size="icon-lg"
-            aria-label="Novo lançamento"
-            className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] size-14 rounded-full shadow-lg md:hidden"
-          >
-            <Plus className="size-6" />
-          </Button>
-        }
-      />
+      {podeEditar && (
+        <MenuDeLancar
+          onNovo={openNew}
+          onTransferir={abrirTransferencia}
+          gatilho={
+            <Button
+              size="icon-lg"
+              aria-label="Novo lançamento"
+              className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] size-14 rounded-full shadow-lg md:hidden"
+            >
+              <Plus className="size-6" />
+            </Button>
+          }
+        />
+      )}
 
       <TransactionFormDialog
         open={formOpen}

@@ -1,7 +1,13 @@
-import type { GroupContents, GroupMember } from '@bolso/shared'
+import type { AccessLevel, GroupContents, GroupMember } from '@bolso/shared'
 import { api } from '@/lib/api-client'
 
-export type PendingInvitation = { id: string; email: string; expiresAt: string; link: string }
+export type PendingInvitation = {
+  id: string
+  email: string
+  role: AccessLevel
+  expiresAt: string
+  link: string
+}
 
 export type InvitationPreview = {
   id: string
@@ -21,8 +27,27 @@ export function listInvitations() {
 }
 
 // Sem serviço de e-mail ainda: o convite volta como link para compartilhar
-export function inviteToGroup(email: string) {
-  return api<PendingInvitation>('/groups/current/invitations', { method: 'POST', body: { email } })
+export function inviteToGroup({ email, role }: { email: string; role: AccessLevel }) {
+  return api<PendingInvitation>('/groups/current/invitations', {
+    method: 'POST',
+    body: { email, role },
+  })
+}
+
+export function cancelInvitation(id: string) {
+  return api<{ id: string }>(`/groups/current/invitations/${id}`, { method: 'DELETE' })
+}
+
+/** O nível de quem já está dentro: pode editar ou só pode ver */
+export function setMemberRole({ id, role }: { id: string; role: AccessLevel }) {
+  return api<{ id: string; role: AccessLevel }>(`/groups/current/members/${id}`, {
+    method: 'PATCH',
+    body: { role },
+  })
+}
+
+export function removeMember(id: string) {
+  return api<{ id: string }>(`/groups/current/members/${id}`, { method: 'DELETE' })
 }
 
 export function renameGroup(name: string) {

@@ -6,10 +6,12 @@ import { EmptyState } from '@/components/empty-state'
 import { RowActions } from '@/components/row-actions'
 import { SectionHeader } from '@/components/section-header'
 import { Button } from '@/components/ui/button'
+import { usePodeEditar } from '@/lib/access'
 import { useContacts, useDeleteContact } from '../queries'
 import { ContactFormDialog } from './contact-form-dialog'
 
 export function ContactsSettings() {
+  const podeEditar = usePodeEditar()
   const { data: contacts = [], isPending, isError } = useContacts()
   const deleteContact = useDeleteContact()
 
@@ -28,10 +30,12 @@ export function ContactsSettings() {
         title="Contatos"
         description="Quem recebe ou paga. Serve para saber quanto já foi para cada um."
         action={
-          <Button onClick={openNew}>
-            <Plus />
-            Novo contato
-          </Button>
+          podeEditar && (
+            <Button onClick={openNew}>
+              <Plus />
+              Novo contato
+            </Button>
+          )
         }
       />
 

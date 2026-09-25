@@ -1,5 +1,5 @@
-import type { GroupRole } from '@bolso/shared'
-import { BookOpen, Check, MoreHorizontal, Pencil, Plus, Trash2, UserPlus } from 'lucide-react'
+import { roleLabels } from '@bolso/shared'
+import { BookOpen, Check, MoreHorizontal, Pencil, Plus, Trash2, Users } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { SectionHeader } from '@/components/section-header'
@@ -17,14 +17,8 @@ import { getInitials } from '@/lib/current-user'
 import { errorMessage } from '@/lib/errors'
 import { useActivateGroup, useGroupInvitations, useGroupMembers } from '../queries'
 import { DeleteGroupDialog } from './delete-group-dialog'
-import { InviteDialog } from './invite-dialog'
 import { NameDialog } from './name-dialog'
-
-const roleLabels: Record<GroupRole, string> = {
-  owner: 'Dono',
-  admin: 'Administra',
-  member: 'Participa',
-}
+import { ShareDialog } from './share-dialog'
 
 const pessoas = (quantas: number) =>
   quantas <= 1 ? 'Só você' : quantas === 2 ? 'Você e mais 1' : `Você e mais ${quantas - 1}`
@@ -160,8 +154,8 @@ export function GroupSettings() {
                       {ativo && (
                         <>
                           <DropdownMenuItem onClick={() => setConvidando(true)}>
-                            <UserPlus />
-                            Convidar alguém
+                            <Users />
+                            Compartilhar
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setRenomeando(true)}>
                             <Pencil />
@@ -192,7 +186,7 @@ export function GroupSettings() {
 
       <p className="text-muted-foreground text-xs">
         Nada atravessa de um orçamento para o outro: nem lançamento, nem categoria, nem relatório.
-        Convidar alguém dá acesso ao orçamento inteiro.
+        Compartilhar dá acesso ao orçamento inteiro — de olhar ou de mexer, você escolhe.
       </p>
 
       <NameDialog
@@ -202,7 +196,7 @@ export function GroupSettings() {
         modo="renomear"
       />
       <NameDialog open={criando} onOpenChange={setCriando} atual="" modo="criar" />
-      <InviteDialog open={convidando} onOpenChange={setConvidando} />
+      <ShareDialog open={convidando} onOpenChange={setConvidando} />
       <DeleteGroupDialog
         group={excluindo}
         onOpenChange={(open) => {

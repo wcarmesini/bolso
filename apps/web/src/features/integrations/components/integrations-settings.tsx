@@ -7,6 +7,7 @@ import { RowActions } from '@/components/row-actions'
 import { SectionHeader } from '@/components/section-header'
 import { Button } from '@/components/ui/button'
 import { BankConnections } from '@/features/bank/components/bank-connections'
+import { usePodeEditar } from '@/lib/access'
 import { useDeleteIntegrationKey, useIntegrationKeys } from '../queries'
 import { IntegrationKeyDialog } from './integration-key-dialog'
 
@@ -19,6 +20,7 @@ import { IntegrationKeyDialog } from './integration-key-dialog'
  * ficam em Ajustes → Chaves de API: é o caminho contrário.)
  */
 export function IntegrationsSettings() {
+  const podeEditar = usePodeEditar()
   const { data: keys = [], isPending, isError } = useIntegrationKeys()
   const deleteKey = useDeleteIntegrationKey()
 
@@ -41,10 +43,12 @@ export function IntegrationsSettings() {
             Ficam criptografadas no servidor e nunca voltam inteiras para o navegador.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
-          <Plus />
-          Adicionar chave
-        </Button>
+        {podeEditar && (
+          <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
+            <Plus />
+            Adicionar chave
+          </Button>
+        )}
       </div>
 
       {isPending ? (

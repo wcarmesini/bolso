@@ -1,4 +1,4 @@
-import { API_KEY_PREFIX, type GroupRole, type RealtimeResource } from '@bolso/shared'
+import { API_KEY_PREFIX, canEdit, type GroupRole, type RealtimeResource } from '@bolso/shared'
 import { eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { createMiddleware } from 'hono/factory'
@@ -156,7 +156,27 @@ async function porChaveDaApi(db: Database, c: Context<AppEnv>) {
 }
 
 export function toRole(role: string): GroupRole {
-  return role === 'owner' || role === 'admin' ? role : 'member'
+  if (role === 'owner' || role === 'admin' || role === 'viewer') return role
+  return 'member'
+}
+
+/**
+ * A trava do "pode ver".
+ *
+ * Esconder botão não é permissão: a garantia mora aqui, numa peneira só, por onde passam
+ * todas as rotas que mexem nos dados do orçamento. Ler é sempre permitido — o nível existe
+ * justamente para isso; qualquer outro método é recusado com todas as letras.
+ *
+ * Fica de fora o que não é dado do orçamento: o perfil da pessoa, a troca de orçamento, criar
+ * um orçamento novo (que é dela) e aceitar convite. Quem só vê aqui é dono em outro lugar.
+ */
+export function exigirEdicao() {
+  return createMiddleware<AppEnv>(async (c, next) => {
+    if (c.req.method !== 'GET' && !canEdit(c.var.role)) {
+      throw new HttpError(403, 'Seu acesso a este orçamento é só de leitura.')
+    }
+    await next()
+  })
 }
 
 // Avisa, em tempo real, todos do grupo que estes dados mudaram

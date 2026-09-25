@@ -2,10 +2,33 @@ import type { AuthProviderId } from '@bolso/shared'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization } from 'better-auth/plugins'
+import { createAccessControl } from 'better-auth/plugins/access'
+import {
+  adminAc,
+  defaultStatements,
+  memberAc,
+  ownerAc,
+} from 'better-auth/plugins/organization/access'
 import type { Database } from './db/client'
 import * as schema from './db/schema'
 import type { Env } from './env'
 import { createPersonalGroup, firstMembership } from './groups'
+
+/*
+ * Os papéis do Bolso.
+ *
+ * O Better Auth traz dono, administrador e participante; falta o "só vê". Ele não é um
+ * participante com menos sorte: é um papel próprio, que não pode nada — nem no orçamento,
+ * nem nas pessoas dele. Quem manda de verdade é a trava do servidor (ver `exigirEdicao`);
+ * isto aqui é para o convite poder nascer com o papel certo.
+ */
+const controleDeAcesso = createAccessControl(defaultStatements)
+const papeis = {
+  owner: ownerAc,
+  admin: adminAc,
+  member: memberAc,
+  viewer: controleDeAcesso.newRole({}),
+}
 
 type SocialProviders = NonNullable<Parameters<typeof betterAuth>[0]['socialProviders']>
 
@@ -64,6 +87,8 @@ export function createAuth(db: Database, env: Env) {
     plugins: [
       organization({
         creatorRole: 'owner',
+        ac: controleDeAcesso,
+        roles: papeis,
         // Sem serviço de e-mail ainda: o convite é compartilhado como link (ver routes/groups.ts)
         sendInvitationEmail: async () => {},
       }),

@@ -17,6 +17,7 @@ import { SectionHeader } from '@/components/section-header'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { umDe, useRemembered } from '@/hooks/use-remembered'
+import { usePodeEditar } from '@/lib/access'
 import { useCategories, useDeleteCategory, useReorderCategories } from '../queries'
 import { type DragZone, useCategoryDrag } from '../use-category-drag'
 import { CategoryBadge } from './category-badge'
@@ -31,6 +32,7 @@ type FormState =
   | { type: 'subcategory'; parent: Category; subcategory: Category | null }
 
 export function CategoriesSettings() {
+  const podeEditar = usePodeEditar()
   const { data: categories = [], isPending, isError } = useCategories()
   const deleteCategory = useDeleteCategory()
   const reorder = useReorderCategories()
@@ -87,10 +89,12 @@ export function CategoriesSettings() {
         title="Categorias"
         description="Organizam entradas e saídas. Cada categoria pode ter subcategorias."
         action={
-          <Button onClick={() => setForm({ type: 'category', category: null })}>
-            <Plus />
-            Nova categoria
-          </Button>
+          podeEditar && (
+            <Button onClick={() => setForm({ type: 'category', category: null })}>
+              <Plus />
+              Nova categoria
+            </Button>
+          )
         }
       />
 
@@ -229,6 +233,8 @@ export function CategoriesSettings() {
 
 /** A alça de arrastar: some do caminho (discreta) e vira mãozinha ao passar o mouse */
 function Alca(props: React.ComponentProps<'button'>) {
+  // Reordenar é gravar: sem alça para quem só vê
+  if (!usePodeEditar()) return null
   return (
     <button
       type="button"

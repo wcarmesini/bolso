@@ -38,6 +38,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { usePodeEditar } from '@/lib/access'
 import { shortDate } from '@/lib/dates'
 import { errorMessage } from '@/lib/errors'
 import { createConnectToken, getBankItem } from '../api'
@@ -68,6 +69,7 @@ const quando = (iso: string | null) => {
  * está na fila.
  */
 export function BankConnections() {
+  const podeEditar = usePodeEditar()
   const { data, isPending } = useBank()
   const sincronizar = useSyncBankConnection()
   const remover = useRemoveBankConnection()
@@ -154,7 +156,7 @@ export function BankConnections() {
             O Bolso busca sozinho de tempos em tempos. O que chega fica esperando sua aprovação.
           </p>
         </div>
-        {chaves.length > 1 ? (
+        {!podeEditar ? null : chaves.length > 1 ? (
           /*
            * Mais de uma chave: a conexão precisa nascer da pessoa certa. No plano pessoal da
            * Pluggy cada chave só enxerga as contas do próprio titular, então conectar o banco
@@ -248,7 +250,7 @@ export function BankConnections() {
                 </span>
               </span>
 
-              {needsAttention(conexao.status) && (
+              {needsAttention(conexao.status) && podeEditar && (
                 <Button
                   variant="outline"
                   size="sm"

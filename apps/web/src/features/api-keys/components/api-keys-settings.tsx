@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { usePodeEditar } from '@/lib/access'
 import { shortDate } from '@/lib/dates'
 import { errorMessage } from '@/lib/errors'
 import { useApiKeys, useCreateApiKey, useDeleteApiKey } from '../queries'
@@ -45,6 +46,7 @@ const escopos = apiKeyScopes.map((scope) => ({ value: scope, label: apiKeyScopeL
  * aparece inteira uma vez só; depois fica guardado só o resumo dela.
  */
 export function ApiKeysSettings() {
+  const podeEditar = usePodeEditar()
   const { data: keys = [], isPending, isError } = useApiKeys()
   const criar = useCreateApiKey()
   const apagar = useDeleteApiKey()
@@ -86,10 +88,12 @@ export function ApiKeysSettings() {
         title="Chaves de API"
         description="Deixam outro programa usar a API do Bolso no seu lugar."
         action={
-          <Button onClick={() => setCriando(true)}>
-            <Plus />
-            Criar chave
-          </Button>
+          podeEditar && (
+            <Button onClick={() => setCriando(true)}>
+              <Plus />
+              Criar chave
+            </Button>
+          )
         }
       />
 

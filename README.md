@@ -16,7 +16,7 @@ Sistema de **orçamento colaborativo**: **leve, rápido, bonito e em tempo real*
 | Tipos e validações compartilhados (`packages/shared`) | ✅ Um Zod só, válido para o front e para a API |
 | Tempo real | ✅ WebSocket por grupo, testado com duas pessoas: a mudança aparece na outra tela em ~15ms |
 | Login | ✅ Sessões com Better Auth. **Google configurado** (em desenvolvimento); faltam Apple e Microsoft (ver [Pendências](#pendências)). A tela de login só tem os botões dos provedores |
-| Orçamentos | ✅ Um orçamento pessoal no primeiro acesso, convite por link, troca e exclusão de orçamento |
+| Orçamentos | ✅ Um orçamento pessoal no primeiro acesso, compartilhar por link com nível (pode editar / pode ver), tirar acesso, troca e exclusão de orçamento |
 | Ajustes | ✅ Perfil, Orçamentos, Categorias, Contas, Contatos, Lixeira, Integrações e Chaves de API, tudo gravando no banco |
 | **Lançamentos** | ✅ Cartão de crédito com fatura, compras parceladas, lançamento dividido em categorias, cópia de lançamento e contato, em tempo real |
 | **Importar extrato (OFX)** | ✅ Lê o arquivo do banco, concilia com o que já foi lançado e importa o resto |
@@ -178,7 +178,7 @@ Tudo fica em `/api`, no mesmo domínio da web (em desenvolvimento o Vite repassa
 | `GET /api/auth-providers` | Quais provedores de login estão configurados (a tela de login mostra só esses) |
 | `/api/auth/*` | Login, sessão, grupos e convites (Better Auth) |
 | `GET · PATCH /api/me` | Nome e foto de quem está logado, mais o grupo ativo |
-| `/api/groups` | Membros, renomear, criar grupo, trocar de grupo ativo e convites |
+| `/api/groups` | Quem tem acesso e com que nível, convites, renomear, criar, trocar e excluir orçamento |
 | `/api/invitations/:id` (+ `/accept`) | Ver e aceitar um convite pelo link |
 | `/api/categories` | Lista, cria, edita e exclui (inclusive subcategorias) |
 | `/api/accounts` | Contas |
@@ -419,7 +419,10 @@ Por isso reimportar o mesmo arquivo não duplica nada, e o que foi conciliado ap
 Feitos com **Better Auth**, que grava sessões no próprio banco. O plugin de organizações vira os **grupos** do Bolso.
 
 - **Primeiro acesso:** ao criar a conta, a pessoa já ganha um grupo pessoal ("Meu Bolso") com **10 categorias iniciais** prontas, algumas com subcategorias. Ninguém começa com a tela vazia.
-- **Convite:** em Ajustes → Orçamentos, escrever o e-mail gera um **link**, que já vai copiado para a área de transferência (serve para mandar no WhatsApp). Quem abre o link vê para qual orçamento é o convite e entra com um clique. O link continua valendo quando existir envio por e-mail: o convite é o mesmo.
+- **Compartilhar:** em Ajustes → Orçamentos, no menu do orçamento. A mesma tela responde "quem entra aqui?": quem já tem acesso e com que nível, os convites pendentes, e o campo para convidar mais alguém. Escrever o e-mail gera um **link**, que já vai copiado para a área de transferência (serve para mandar no WhatsApp). Quem abre o link vê para qual orçamento é o convite e entra com um clique. O link continua valendo quando existir envio por e-mail: o convite é o mesmo.
+- **Dois níveis: pode editar e pode ver.** O nível é escolhido no convite e muda depois, na mesma tela. Quem **pode ver** enxerga tudo — lançamentos, relatórios, orçamento — e não grava nada; quem **pode editar** faz tudo, menos mexer em quem tem acesso. O **dono** é quem criou: só ele exclui o orçamento, e ninguém o rebaixa nem o tira (o servidor recusa).
+- **A trava é do servidor, não da tela.** Esconder botão não é permissão: todas as rotas de dados do orçamento passam por uma peneira só (`exigirEdicao`), onde ler é livre e qualquer gravação de quem só vê é recusada com 403. A interface segue a mesma regra — some o botão de lançar, as ações das linhas, a alça de arrastar categorias, o restaurar da lixeira e a tela de conferir —, e o título ganha o selo **Só leitura**.
+- **Tirar o acesso** é imediato, e a pessoa perde o orçamento de vista no mesmo instante. Ninguém fica sem nada: quem sai e não participa de nenhum outro ganha o próprio de volta, como no primeiro acesso. Um convite ainda não aceito também pode ser cancelado.
 - **Várias pessoas, vários orçamentos:** cada pessoa pode estar em mais de um orçamento (o dela e o da casa, por exemplo) e troca em Ajustes → Orçamentos. A sessão guarda qual é o orçamento em uso.
 - **Excluir um orçamento** é o único lugar do Bolso onde algo sai do banco de verdade: não há lixeira nem desfazer. Só o dono exclui, a tela diz quantos lançamentos, contas e categorias vão junto e pede o **nome escrito à mão**. Ninguém fica sem nenhum orçamento: quem só participava daquele ganha um próprio de volta, como no primeiro acesso.
 - **A tela de login mostra só os provedores configurados** (pergunta em `/api/auth-providers`). Em desenvolvimento, os que faltam aparecem desligados, para lembrar o que falta; em produção, somem.

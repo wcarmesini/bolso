@@ -7,6 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { usePodeEditar } from '@/lib/access'
 
 type ExtraAction = {
   label: string
@@ -39,6 +40,10 @@ export function RowActions({
   onDelete,
   deleteLabel = 'Excluir',
 }: RowActionsProps) {
+  const podeEditar = usePodeEditar()
+  // Quem só vê não tem o que fazer numa linha: nem editar, nem excluir
+  if (!podeEditar) return null
+
   const allActions: ExtraAction[] = [
     ...(onEdit ? [{ label: 'Editar', icon: Pencil, onSelect: onEdit }] : []),
     ...actions,

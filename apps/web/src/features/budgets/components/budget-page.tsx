@@ -10,6 +10,7 @@ import { StatGrid } from '@/components/stat-grid'
 import { CategoryBadge } from '@/features/categories/components/category-badge'
 import { useCategories } from '@/features/categories/queries'
 import { useBudgetReport } from '@/features/reports/queries'
+import { usePodeEditar } from '@/lib/access'
 import { currentMonth } from '@/lib/dates'
 import { formatCents } from '@/lib/money'
 import { BudgetLimitDialog, type LimitTarget } from './budget-limit-dialog'
@@ -39,6 +40,7 @@ const linhaVazia = (category: Category): BudgetLine => ({
 })
 
 export function BudgetPage() {
+  const podeEditar = usePodeEditar()
   const [month, setMonth] = useState(currentMonth)
   const [target, setTarget] = useState<LimitTarget | null>(null)
   const [aberta, setAberta] = useState<Set<string>>(new Set())
@@ -91,6 +93,8 @@ export function BudgetPage() {
 
   /** Abre o orçamento da linha já sabendo o espaço que ela tem dentro da principal */
   const abrirDialogo = (line: BudgetLine, kind: TransactionType, principal?: BudgetLine) => {
+    // Definir um limite é gravar: para quem só vê, a linha continua clicável e não abre nada
+    if (!podeEditar) return
     const orcadoNasFilhas = line.children.reduce(
       (total, child) => total + (child.limitCents ?? 0),
       0,

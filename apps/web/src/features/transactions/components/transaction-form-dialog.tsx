@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldGroup } from '@/components/ui/field'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { usePodeEditar } from '@/lib/access'
 import { today } from '@/lib/dates'
 import { errorMessage, FieldValidationError } from '@/lib/errors'
 import { useSaveTransaction } from '../queries'
@@ -122,6 +123,7 @@ export function TransactionFormDialog({
   lockKeyFields = false,
 }: TransactionFormDialogProps) {
   const saveTransaction = useSaveTransaction()
+  const podeEditar = usePodeEditar()
   const [scope, setScope] = useState<EditScope>('one')
 
   const form = useForm<TransactionFormValues>({ resolver, defaultValues: emptyValues(null) })
@@ -281,8 +283,11 @@ export function TransactionFormDialog({
           {transaction && <TransactionHistory transactionId={transaction.id} />}
 
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
-            <SubmitButton control={control} />
+            {/* Quem só vê abre o lançamento para conferir; não há o que salvar */}
+            <DialogClose render={<Button variant="outline" />}>
+              {podeEditar ? 'Cancelar' : 'Fechar'}
+            </DialogClose>
+            {podeEditar && <SubmitButton control={control} />}
           </DialogFooter>
         </form>
       </DialogContent>

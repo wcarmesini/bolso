@@ -1,9 +1,11 @@
-import { FileUp, History, Landmark } from 'lucide-react'
+import { Eye, FileUp, History, Landmark } from 'lucide-react'
 import { useState } from 'react'
+import { EmptyState } from '@/components/empty-state'
 import { PageBody } from '@/components/page-body'
 import { PageHeader } from '@/components/page-header'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useBank } from '@/features/bank/queries'
+import { usePodeEditar } from '@/lib/access'
 import { BankInbox } from './bank-inbox'
 import { HistoryPanel } from './history-panel'
 import { OfxImport } from './ofx-import'
@@ -18,6 +20,7 @@ type Fonte = 'banco' | 'arquivo' | 'historico'
  * Open Finance, ou para trazer um histórico antigo de uma vez.
  */
 export function ImportPage() {
+  const podeEditar = usePodeEditar()
   const { data } = useBank()
   const esperando = (data?.connections ?? []).reduce(
     (total, conexao) => total + conexao.pendingCount,
@@ -28,6 +31,21 @@ export function ImportPage() {
   const [escolhida, setEscolhida] = useState<Fonte | null>(null)
   // Sem escolha ainda: vai para onde há trabalho a fazer
   const fonte = escolhida ?? (temBanco ? 'banco' : 'arquivo')
+
+  if (!podeEditar) {
+    return (
+      <>
+        <PageHeader title="Conferir lançamentos" />
+        <PageBody>
+          <EmptyState
+            icon={Eye}
+            title="Só quem edita confere"
+            text="Aprovar o que vem do banco e importar extrato criam lançamentos. Seu acesso a este orçamento é de leitura."
+          />
+        </PageBody>
+      </>
+    )
+  }
 
   return (
     <>

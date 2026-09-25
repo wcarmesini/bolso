@@ -12,12 +12,14 @@ import { EmptyState } from '@/components/empty-state'
 import { RowActions } from '@/components/row-actions'
 import { SectionHeader } from '@/components/section-header'
 import { Button } from '@/components/ui/button'
+import { usePodeEditar } from '@/lib/access'
 import { formatCents } from '@/lib/money'
 import { accountTypeMeta } from '../meta'
 import { useAccounts, useDeleteAccount } from '../queries'
 import { AccountFormDialog } from './account-form-dialog'
 
 export function AccountsSettings() {
+  const podeEditar = usePodeEditar()
   const { data: accounts = [], isPending, isError } = useAccounts()
   const deleteAccount = useDeleteAccount()
 
@@ -48,10 +50,12 @@ export function AccountsSettings() {
         title="Contas"
         description="Bancos, cartões e carteira de onde o dinheiro entra e sai."
         action={
-          <Button onClick={openNew}>
-            <Plus />
-            Nova conta
-          </Button>
+          podeEditar && (
+            <Button onClick={openNew}>
+              <Plus />
+              Nova conta
+            </Button>
+          )
         }
       />
 

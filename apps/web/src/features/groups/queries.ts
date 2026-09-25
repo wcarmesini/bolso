@@ -2,13 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   acceptInvitation,
   activateGroup,
+  cancelInvitation,
   createGroup,
   deleteGroup,
   getGroupContents,
   inviteToGroup,
   listInvitations,
   listMembers,
+  removeMember,
   renameGroup,
+  setMemberRole,
 } from './api'
 
 export function useGroupMembers() {
@@ -26,6 +29,28 @@ export function useInviteToGroup() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['group-invitations'] }),
   })
 }
+
+/*
+ * Quem tem acesso e com que nível.
+ *
+ * Mudar isso mexe no que a outra pessoa enxerga agora mesmo, então tudo recarrega: a lista de
+ * quem está dentro, os convites e o próprio perfil (é dele que sai o nível de quem está vendo).
+ */
+function useAcesso<Args>(mutationFn: (args: Args) => Promise<unknown>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['group-members'] })
+      queryClient.invalidateQueries({ queryKey: ['group-invitations'] })
+      queryClient.invalidateQueries({ queryKey: ['me'] })
+    },
+  })
+}
+
+export const useSetMemberRole = () => useAcesso(setMemberRole)
+export const useRemoveMember = () => useAcesso(removeMember)
+export const useCancelInvitation = () => useAcesso(cancelInvitation)
 
 export function useRenameGroup() {
   const queryClient = useQueryClient()

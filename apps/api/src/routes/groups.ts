@@ -4,6 +4,7 @@ import {
   type GroupContents,
   type GroupMember,
   inviteInputSchema,
+  memberRoleSchema,
 } from '@bolso/shared'
 import { zValidator } from '@hono/zod-validator'
 import { and, asc, count, eq, gt, isNull, ne } from 'drizzle-orm'
@@ -46,6 +47,21 @@ export function groupsRoutes(deps: Deps) {
     if (role !== 'owner' && role !== 'admin') {
       throw new HttpError(403, 'Só quem administra o orçamento pode fazer isso.')
     }
+  }
+
+  /** Alguém do orçamento em quem dá para mexer: nem o dono, nem quem está pedindo */
+  const membroDoGrupo = async (groupId: string, id: string, quemPede: string, userId: string) => {
+    requireManager(quemPede)
+    const [row] = await db
+      .select({ id: member.id, userId: member.userId, role: member.role })
+      .from(member)
+      .where(and(eq(member.id, id), eq(member.organizationId, groupId)))
+      .limit(1)
+    if (!row) throw new HttpError(404, 'Esta pessoa não está no orçamento.')
+    if (row.role === 'owner') throw new HttpError(403, 'O dono do orçamento não pode ser mexido.')
+    if (row.userId === userId)
+      throw new HttpError(403, 'Você não pode mexer no seu próprio acesso.')
+    return row
   }
 
   return (
@@ -100,12 +116,12 @@ export function groupsRoutes(deps: Deps) {
 
       // Sem serviço de e-mail ainda: o convite vira um link para compartilhar (WhatsApp etc.)
       .post('/current/invitations', zValidator('json', inviteInputSchema, onInvalid), async (c) => {
-        const { email } = c.req.valid('json')
+        const { email, role } = c.req.valid('json')
         const created = await withAuthErrors(
           () =>
             auth.api.createInvitation({
               headers: c.req.raw.headers,
-              body: { email, role: 'member', organizationId: c.var.groupId },
+              body: { email, role, organizationId: c.var.groupId },
             }),
           'Não foi possível criar o convite.',
         )
@@ -114,6 +130,58 @@ export function groupsRoutes(deps: Deps) {
           { id: created.id, email: created.email, link: `${env.PUBLIC_URL}/convite/${created.id}` },
           201,
         )
+      })
+
+      // Desistir de um convite que ainda não foi aceito
+      .delete('/current/invitations/:id', async (c) => {
+        requireManager(c.var.role)
+        const [alvo] = await db
+          .select({ id: invitation.id })
+          .from(invitation)
+          .where(
+            and(eq(invitation.id, c.req.param('id')), eq(invitation.organizationId, c.var.groupId)),
+          )
+          .limit(1)
+        if (!alvo) throw new HttpError(404, 'Convite não encontrado.')
+        await db.delete(invitation).where(eq(invitation.id, alvo.id))
+        notify(deps, c, 'group')
+        return c.json({ id: alvo.id })
+      })
+
+      /*
+       * Mudar o nível de quem já está dentro, e tirar o acesso.
+       *
+       * As duas param no dono: ele é quem criou o orçamento, e rebaixá-lo ou tirá-lo deixaria
+       * o livro sem responsável. Também param em quem está pedindo: mexer no próprio acesso é
+       * outra conversa (sair do orçamento), e no meio de uma tela de gerenciar dá engano.
+       */
+      .patch('/current/members/:id', zValidator('json', memberRoleSchema, onInvalid), async (c) => {
+        const alvo = await membroDoGrupo(
+          c.var.groupId,
+          c.req.param('id'),
+          c.var.role,
+          c.var.user.id,
+        )
+        const { role } = c.req.valid('json')
+        await db.update(member).set({ role }).where(eq(member.id, alvo.id))
+        notify(deps, c, 'group')
+        return c.json({ id: alvo.id, role })
+      })
+
+      .delete('/current/members/:id', async (c) => {
+        const alvo = await membroDoGrupo(
+          c.var.groupId,
+          c.req.param('id'),
+          c.var.role,
+          c.var.user.id,
+        )
+        await db.delete(member).where(eq(member.id, alvo.id))
+
+        // Quem sai e não participa de mais nada ganha o próprio orçamento, como no 1º acesso
+        if (!(await firstMembership(db, alvo.userId))) await createPersonalGroup(db, alvo.userId)
+
+        notify(deps, c, 'group')
+        return c.json({ id: alvo.id })
       })
 
       // Novo grupo (ex.: um para a casa, outro para a viagem). Vira o grupo ativo.
