@@ -246,8 +246,12 @@ export function bankRoutes(deps: Deps) {
           description: row.description,
           kind: row.kind,
           installment:
-            row.installmentNumber && row.installmentCount
-              ? { number: row.installmentNumber, count: row.installmentCount }
+            row.installmentNumber && row.installmentCount && row.purchaseDate
+              ? {
+                  number: row.installmentNumber,
+                  count: row.installmentCount,
+                  purchaseDate: row.purchaseDate,
+                }
               : null,
         }))
         const existentes = await carregarExistentes(

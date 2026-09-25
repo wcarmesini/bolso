@@ -37,6 +37,12 @@ export type ImportRow = {
   description: string
   /** Como o banco classificou a linha ("Pix - Enviado") */
   kind: string | null
+  /*
+   * Parcela de cartão, quando o banco conta que é uma. `purchaseDate` é a data da **compra**:
+   * é ela que vale como competência das dez parcelas, e não a data em que cada uma caiu na
+   * fatura. A tela mostra as duas coisas, para ninguém achar que o Bolso errou o mês.
+   */
+  installment: { number: number; count: number; purchaseDate: string } | null
   status: ImportRowStatus
   /** No "match", o lançamento parecido; no "imported", o que já veio deste extrato */
   match: ImportMatch | null

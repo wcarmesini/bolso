@@ -7,6 +7,7 @@ import type {
   Transaction,
   UndoResult,
 } from '@bolso/shared'
+import { lerParcelaDoTexto } from '@bolso/shared'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { bankConnections, pendingTransactions } from '../src/db/schema'
@@ -476,6 +477,64 @@ describe('apagar um lançamento que veio do banco', () => {
     })
     const fim = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
     expect(fim.body.rows.some((row) => row.description === 'VOLTOU LTDA')).toBe(false)
+  })
+})
+
+describe('parcela lida do texto', () => {
+  it('reconhece "PARC 02/10" e conta os meses para trás', () => {
+    expect(lerParcelaDoTexto('PARC=110IMUNO PARC 02/10 SAO JOSE    BR')).toEqual({
+      number: 2,
+      count: 10,
+    })
+    expect(lerParcelaDoTexto('EC *CHEIRINHO PARC 07/12 OSASCO      BR')).toEqual({
+      number: 7,
+      count: 12,
+    })
+    // Sem a palavra "parcela", "15/09" numa descrição é data, não parcela
+    expect(lerParcelaDoTexto('COMPRA 15/09 MERCADO')).toBeNull()
+  })
+
+  it('a fila mostra a parcela e a data da compra', async () => {
+    const [linha] = await api.db
+      .insert(pendingTransactions)
+      .values({
+        groupId,
+        connectionId: conexaoId,
+        accountId: conta.id,
+        externalId: 'texto-1',
+        date: '2026-09-21',
+        amountCents: -87000,
+        description: 'PARC=110IMUNO PARC 02/10 SAO JOSE    BR',
+        kind: 'Healthcare',
+        installmentNumber: 2,
+        installmentCount: 10,
+        purchaseDate: '2026-08-21',
+      })
+      .returning()
+
+    const fila = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
+    const daParcela = fila.body.rows.find((row) => row.fitId === linha?.id)
+    expect(daParcela?.installment).toEqual({
+      number: 2,
+      count: 10,
+      purchaseDate: '2026-08-21',
+    })
+
+    // Aprovando, a competência é agosto — o mês da compra, não o da fatura
+    await ana.json(`/api/bank/connections/${conexaoId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({
+        decisions: [
+          { fitId: daParcela?.fitId, action: 'create', categoryId: mercado, contactId: null },
+        ],
+      }),
+    })
+    const lancamentos = await ana.json<Transaction[]>(
+      '/api/transactions?from=2026-08-01&to=2026-08-31',
+    )
+    const criado = lancamentos.body.find((item) => item.description.includes('IMUNO'))
+    expect(criado?.purchaseDate).toBe('2026-08-21')
+    expect(criado?.installment).toMatchObject({ number: 2, count: 10 })
   })
 })
 

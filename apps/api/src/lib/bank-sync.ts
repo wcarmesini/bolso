@@ -1,5 +1,5 @@
 import { isBankReady } from '@bolso/shared'
-import { and, eq } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import { bankConnections, integrationKeys, pendingTransactions } from '../db/schema'
 import type { Deps } from '../http'
@@ -93,10 +93,28 @@ export async function sincronizar(
    * valor de compra internacional), e reconferir essa janela sai barato.
    */
   const ultima = conexao.lastSyncedAt?.toISOString().slice(0, 10)
-  const desde =
+  let desde =
     ultima && dias(ultima, -JANELA_DE_REVISAO) > conexao.startDate
       ? dias(ultima, -JANELA_DE_REVISAO)
       : conexao.startDate
+
+  /*
+   * A janela também tem de alcançar o que ainda espera decisão, por mais antigo que seja:
+   * enquanto a linha está na fila, ela é um assunto aberto, e o banco pode ter mudado algo
+   * nela (ou o Bolso pode ter aprendido a ler um campo que antes ignorava).
+   */
+  const [maisAntiga] = await db
+    .select({ date: pendingTransactions.date })
+    .from(pendingTransactions)
+    .where(
+      and(
+        eq(pendingTransactions.connectionId, conexao.id),
+        eq(pendingTransactions.status, 'pending'),
+      ),
+    )
+    .orderBy(asc(pendingTransactions.date))
+    .limit(1)
+  if (maisAntiga && maisAntiga.date < desde) desde = maisAntiga.date
 
   const lancamentos = await buscarLancamentos(credenciais, conexao.externalAccountId, desde)
 
@@ -136,7 +154,28 @@ export async function sincronizar(
             raw: item.raw,
           })),
         )
-        .onConflictDoNothing()
+        /*
+         * O que já está na fila é **atualizado**, não ignorado: o banco reenvia as linhas da
+         * janela de revisão, e é assim que uma linha guardada por uma versão antiga do Bolso
+         * ganha o que ela não tinha — a parcela, o estabelecimento, o payload inteiro. Só
+         * mexe no que ainda espera decisão: aprovado e dispensado ficam como estão.
+         */
+        .onConflictDoUpdate({
+          target: [pendingTransactions.groupId, pendingTransactions.externalId],
+          set: {
+            date: sql`excluded.date`,
+            amountCents: sql`excluded.amount_cents`,
+            description: sql`excluded.description`,
+            kind: sql`excluded.kind`,
+            installmentNumber: sql`excluded.installment_number`,
+            installmentCount: sql`excluded.installment_count`,
+            purchaseDate: sql`excluded.purchase_date`,
+            merchant: sql`excluded.merchant`,
+            raw: sql`excluded.raw`,
+            updatedAt: new Date(),
+          },
+          setWhere: eq(pendingTransactions.status, 'pending'),
+        })
     }
   }
 

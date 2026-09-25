@@ -82,7 +82,20 @@ export function importsRoutes(deps: Deps) {
           db,
           existentes.map((row) => row.id),
         )
-        const { rows, unmatched, available } = conciliar(statement.transactions, existentes, nomes)
+        /*
+         * O extrato não tem campo de parcela: o que existe é "PARC 02/10" no texto. A data da
+         * compra sai daí — contando os meses para trás a partir desta parcela.
+         */
+        const linhas = statement.transactions.map((item) => ({
+          ...item,
+          installment: item.parcela
+            ? {
+                ...item.parcela,
+                purchaseDate: mesesAtras(item.date, item.parcela.number - 1),
+              }
+            : null,
+        }))
+        const { rows, unmatched, available } = conciliar(linhas, existentes, nomes)
 
         // A conta do extrato: saldo anterior + o que se moveu tem que dar o saldo final
         const movementCents = statement.transactions.reduce(

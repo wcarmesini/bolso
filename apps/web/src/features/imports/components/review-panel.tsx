@@ -405,7 +405,8 @@ export function ReviewPanel({
                 amountCents: Math.abs(detalhando.amountCents),
                 description: detalhando.description,
                 accountId,
-                purchaseDate: detalhando.date,
+                // Parcela: a competência é a data da compra; o caixa continua sendo o da parcela
+                purchaseDate: detalhando.installment?.purchaseDate ?? detalhando.date,
                 paymentDate: detalhando.date,
                 splits: [
                   {
@@ -584,7 +585,20 @@ function Linha({
         <span className="min-w-0">
           <span className="block truncate text-sm">{row.description || '—'}</span>
           <span className="block truncate text-muted-foreground text-xs">
-            {[shortDate(row.date), row.kind].filter(Boolean).join(' · ')}
+            {[
+              shortDate(row.date),
+              row.kind,
+              /*
+               * A parcela precisa aparecer aqui: o valor desta linha é de uma prestação, mas
+               * o gasto é da data da compra — e é nessa data que ela vai entrar. Sem dizer
+               * isso, quem confere acha que o Bolso errou o mês.
+               */
+              row.installment
+                ? `parcela ${row.installment.number}/${row.installment.count} · compra em ${shortDate(row.installment.purchaseDate)}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </span>
         </span>
         <span

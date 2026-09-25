@@ -1,4 +1,4 @@
-import type { BankAccountOption } from '@bolso/shared'
+import { type BankAccountOption, lerParcelaDoTexto } from '@bolso/shared'
 import { HttpError } from '../http'
 
 /*
@@ -268,11 +268,17 @@ export async function buscarLancamentos(
  */
 function parcelaDe(item: LancamentoResposta): PluggyTransaction['installment'] {
   const meta = item.creditCardMetadata
-  const number = meta?.installmentNumber ?? 0
-  const count = meta?.totalInstallments ?? 0
-  if (!meta || number < 1 || count < 2) return null
+  /*
+   * O campo estruturado é o melhor caminho, mas nem todo banco preenche — e vários escrevem
+   * "PARC 02/10" na própria descrição, que é de onde o extrato OFX já lia. Quando o campo
+   * falta, a descrição vale: perder a parcela por falta de um campo seria desperdício.
+   */
+  const doTexto = lerParcelaDoTexto(`${item.description} ${item.descriptionRaw ?? ''}`)
+  const number = meta?.installmentNumber ?? doTexto?.number ?? 0
+  const count = meta?.totalInstallments ?? doTexto?.count ?? 0
+  if (number < 1 || count < 2) return null
 
-  const doBanco = meta.purchaseDate?.slice(0, 10)
+  const doBanco = meta?.purchaseDate?.slice(0, 10)
   if (doBanco) {
     return { number, count, purchaseDate: doBanco, purchaseDateFromBank: true }
   }

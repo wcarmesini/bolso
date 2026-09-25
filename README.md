@@ -330,6 +330,15 @@ a **data da compra**. Quando não manda, a data é calculada: a parcela 2 que ca
 veio de uma compra de agosto. No OFX não existe campo para isso, então o número sai do próprio
 texto (`PARC 02/10`), com uma regra apertada para não confundir parcela com data.
 
+Quando o banco não preenche esse campo — e vários não preenchem —, a parcela sai da própria
+descrição (`PARC 02/10`), que é de onde o extrato OFX já lia. A conferência mostra as duas
+coisas na linha: *"parcela 2/10 · compra em 21/08"*, para ninguém achar que o Bolso errou o mês.
+
+A busca **atualiza** o que já está na fila, em vez de ignorar: o banco reenvia as linhas ainda
+abertas, e é assim que uma linha guardada por uma versão antiga do Bolso ganha o que ela não
+tinha. Por isso a janela de revisão alcança a linha pendente mais antiga, por mais velha que
+seja — enquanto ela espera decisão, é assunto aberto.
+
 As parcelas que chegam mês a mês se juntam numa **série** (a mesma de "3 de 10" do lançamento
 manual), então editar ou excluir a série inteira funciona igual. O Pluggy não manda um
 identificador que ligue as parcelas — eles dizem isso na documentação —, então a âncora é a

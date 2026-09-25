@@ -68,6 +68,8 @@ export type LinhaDeFora = {
   amountCents: number
   description: string
   kind: string | null
+  /** "2 de 10" e a data da compra, quando o banco conta que é uma parcela */
+  installment: { number: number; count: number; purchaseDate: string } | null
 }
 
 export type Existente = {
