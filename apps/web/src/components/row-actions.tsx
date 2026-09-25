@@ -46,7 +46,7 @@ export function RowActions({
 
   return (
     <>
-      <div className="-ml-2 hidden shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 pointer-fine:flex">
+      <div className="hidden shrink-0 items-center gap-0.5 pl-1 opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 pointer-fine:flex">
         {allActions.map(({ label, icon: Icon, onSelect }) => (
           <Button
             key={label}
@@ -55,7 +55,7 @@ export function RowActions({
             title={label}
             aria-label={`${label}: ${itemName}`}
             onClick={onSelect}
-            className="text-muted-foreground"
+            className="text-muted-foreground hover:bg-transparent hover:text-foreground"
           >
             <Icon className="size-3.5" />
           </Button>
@@ -66,7 +66,7 @@ export function RowActions({
           title={deleteLabel}
           aria-label={`${deleteLabel}: ${itemName}`}
           onClick={onDelete}
-          className="text-muted-foreground hover:text-destructive"
+          className="text-muted-foreground hover:bg-transparent hover:text-destructive"
         >
           <Trash2 className="size-3.5" />
         </Button>

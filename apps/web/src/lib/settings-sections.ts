@@ -1,4 +1,13 @@
-import { KeyRound, Landmark, Smartphone, Tags, UserRound, Users } from 'lucide-react'
+import {
+  Contact2,
+  KeyRound,
+  Landmark,
+  Plug,
+  Smartphone,
+  Tags,
+  UserRound,
+  Users,
+} from 'lucide-react'
 
 export const settingsSections = [
   {
@@ -26,9 +35,21 @@ export const settingsSections = [
     icon: Landmark,
   },
   {
+    to: '/ajustes/contatos',
+    title: 'Contatos',
+    description: 'Quem recebe ou paga',
+    icon: Contact2,
+  },
+  {
+    to: '/ajustes/integracoes',
+    title: 'Integrações',
+    description: 'Bancos conectados e serviços que o Bolso usa',
+    icon: Plug,
+  },
+  {
     to: '/ajustes/chaves-api',
     title: 'Chaves de API',
-    description: 'Integrações e acesso por outros apps',
+    description: 'Acesso à API do Bolso por outros programas',
     icon: KeyRound,
   },
   {

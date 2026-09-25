@@ -1,8 +1,10 @@
 import {
+  type IntegrationKeyFormInput,
   type IntegrationKeyFormValues,
   integrationKeyFormSchema,
   integrationProviders,
   isIntegrationProvider,
+  needsClientId,
   providerMeta,
 } from '@bolso/shared'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -43,10 +45,11 @@ const providerItems = integrationProviders.map((provider) => ({
   label: providerMeta[provider].label,
 }))
 
-const emptyValues: IntegrationKeyFormValues = {
+const emptyValues: IntegrationKeyFormInput = {
   provider: 'pluggy',
   customProvider: '',
   label: '',
+  clientId: '',
   secret: '',
 }
 
@@ -59,7 +62,7 @@ export function IntegrationKeyDialog({ open, onOpenChange }: IntegrationKeyDialo
   const createKey = useCreateIntegrationKey()
   const [showSecret, setShowSecret] = useState(false)
 
-  const form = useForm<IntegrationKeyFormValues>({
+  const form = useForm<IntegrationKeyFormInput, unknown, IntegrationKeyFormValues>({
     resolver: zodResolver(integrationKeyFormSchema),
     defaultValues: emptyValues,
   })
@@ -90,7 +93,7 @@ export function IntegrationKeyDialog({ open, onOpenChange }: IntegrationKeyDialo
           <DialogHeader>
             <DialogTitle>Adicionar chave</DialogTitle>
             <DialogDescription>
-              A chave fica salva neste navegador e depois aparece só com o final.
+              A chave é guardada criptografada no servidor e depois aparece só com o final.
             </DialogDescription>
           </DialogHeader>
 
@@ -138,6 +141,25 @@ export function IntegrationKeyDialog({ open, onOpenChange }: IntegrationKeyDialo
               </Field>
             )}
 
+            {needsClientId(provider) && (
+              <Field data-invalid={Boolean(errors.clientId)}>
+                <FieldLabel htmlFor="key-client-id">Client ID</FieldLabel>
+                <Input
+                  id="key-client-id"
+                  placeholder="Cole o Client ID"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="font-mono"
+                  aria-invalid={Boolean(errors.clientId)}
+                  {...form.register('clientId')}
+                />
+                <FieldDescription>
+                  A parte pública do par. O segredo fica só no servidor do Bolso.
+                </FieldDescription>
+                <FieldError errors={[errors.clientId]} />
+              </Field>
+            )}
+
             <Field data-invalid={Boolean(errors.label)}>
               <FieldLabel htmlFor="key-label">Apelido (opcional)</FieldLabel>
               <Input
@@ -151,7 +173,9 @@ export function IntegrationKeyDialog({ open, onOpenChange }: IntegrationKeyDialo
             </Field>
 
             <Field data-invalid={Boolean(errors.secret)}>
-              <FieldLabel htmlFor="key-secret">Chave</FieldLabel>
+              <FieldLabel htmlFor="key-secret">
+                {needsClientId(provider) ? 'Client Secret' : 'Chave'}
+              </FieldLabel>
               <InputGroup>
                 <InputGroupInput
                   id="key-secret"

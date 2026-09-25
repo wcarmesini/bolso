@@ -54,6 +54,7 @@ export async function refreshOpenStatements(
     .where(
       and(
         eq(transactions.accountId, accountId),
+        isNull(transactions.deletedAt),
         or(
           gte(transactions.statementMonth, month),
           and(isNull(transactions.statementMonth), gte(transactions.purchaseDate, `${month}-01`)),

@@ -73,7 +73,7 @@ describe('categorias', () => {
     const channel = listen(api.hub, anaGroupId)
     const created = await ana.json<Category>('/api/categories', {
       method: 'POST',
-      body: JSON.stringify({ name: 'Pets', kind: 'expense', icon: 'paw-print', color: 'teal' }),
+      body: JSON.stringify({ name: 'Pets', kind: 'expense', icon: 'paw-print', color: '#14b8a6' }),
     })
     expect(created.status).toBe(201)
     expect(channel.received).toEqual([
@@ -82,7 +82,7 @@ describe('categorias', () => {
 
     const duplicate = await ana.json<{ error: string; field: string }>('/api/categories', {
       method: 'POST',
-      body: JSON.stringify({ name: 'PÉTS', kind: 'expense', icon: 'paw-print', color: 'teal' }),
+      body: JSON.stringify({ name: 'PÉTS', kind: 'expense', icon: 'paw-print', color: '#14b8a6' }),
     })
     expect(duplicate.status).toBe(409)
     expect(duplicate.body.field).toBe('name')
@@ -92,7 +92,7 @@ describe('categorias', () => {
   it('aceita o mesmo nome em tipos diferentes (despesa e receita)', async () => {
     const income = await ana.json<Category>('/api/categories', {
       method: 'POST',
-      body: JSON.stringify({ name: 'Pets', kind: 'income', icon: 'paw-print', color: 'teal' }),
+      body: JSON.stringify({ name: 'Pets', kind: 'income', icon: 'paw-print', color: '#14b8a6' }),
     })
     expect(income.status).toBe(201)
   })
@@ -131,7 +131,7 @@ describe('categorias', () => {
     )
     const response = await ana.json<Category>(`/api/categories/${moradia?.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ name: 'Moradia', kind: 'income', icon: 'house', color: 'blue' }),
+      body: JSON.stringify({ name: 'Moradia', kind: 'income', icon: 'house', color: '#0ea5e9' }),
     })
     expect(response.status).toBe(200)
 
@@ -247,7 +247,9 @@ describe('orçamentos', () => {
 
     // Outubro e novembro herdam o de setembro, sem ninguém redigitar
     const novembro = await ana.json<Budget[]>('/api/budgets?month=2026-11')
-    expect(novembro.body).toEqual([{ categoryId: mercado, limitCents: 150000, since: '2026-09' }])
+    expect(novembro.body).toEqual([
+      { categoryId: mercado, limitCents: 150000, since: '2026-09', items: [] },
+    ])
     // Antes de setembro não havia limite
     const agosto = await ana.json<Budget[]>('/api/budgets?month=2026-08')
     expect(agosto.body).toEqual([])
@@ -258,15 +260,15 @@ describe('orçamentos', () => {
     expect((await ana.json<Budget[]>('/api/budgets?month=2026-11')).body.length).toBe(1)
   })
 
-  it('recusa orçamento em subcategoria', async () => {
+  it('aceita orçamento em subcategoria', async () => {
     const categories = await ana.json<Category[]>('/api/categories')
     const sub = categories.body.find((category) => category.parentId)
-    const response = await ana.json<{ error: string }>('/api/budgets', {
+    const response = await ana.json<Budget>('/api/budgets', {
       method: 'PUT',
       body: JSON.stringify({ categoryId: sub?.id, month: '2026-09', limitCents: 1000 }),
     })
-    expect(response.status).toBe(400)
-    expect(response.body.error).toContain('principal')
+    expect(response.status).toBe(200)
+    expect(response.body).toMatchObject({ categoryId: sub?.id, limitCents: 1000 })
   })
 })
 

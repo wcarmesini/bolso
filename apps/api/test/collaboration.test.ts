@@ -29,7 +29,7 @@ describe('grupos separados', () => {
   it('não dá para ver nem mexer no dado de outro grupo', async () => {
     const criada = await ana.json<Category>('/api/categories', {
       method: 'POST',
-      body: JSON.stringify({ name: 'Viagem', kind: 'expense', icon: 'plane', color: 'blue' }),
+      body: JSON.stringify({ name: 'Viagem', kind: 'expense', icon: 'plane', color: '#0ea5e9' }),
     })
 
     const deBruno = await bruno.json<Category[]>('/api/categories')
@@ -37,7 +37,7 @@ describe('grupos separados', () => {
 
     const tentativaDeEditar = await bruno.request(`/api/categories/${criada.body.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ name: 'Invadida', kind: 'expense', icon: 'plane', color: 'red' }),
+      body: JSON.stringify({ name: 'Invadida', kind: 'expense', icon: 'plane', color: '#ef4444' }),
     })
     expect(tentativaDeEditar.status).toBe(404)
 
@@ -115,7 +115,7 @@ describe('tempo real', () => {
 
     await bruno.request('/api/categories', {
       method: 'POST',
-      body: JSON.stringify({ name: 'Presentes', kind: 'expense', icon: 'gift', color: 'pink' }),
+      body: JSON.stringify({ name: 'Presentes', kind: 'expense', icon: 'gift', color: '#ec4899' }),
     })
     await bruno.request('/api/accounts', {
       method: 'POST',
@@ -144,7 +144,7 @@ describe('tempo real', () => {
         name: 'Livros',
         kind: 'expense',
         icon: 'graduation-cap',
-        color: 'violet',
+        color: '#8b5cf6',
       }),
     })
     expect(canalDeOutroGrupo.received).toEqual([])

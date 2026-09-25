@@ -1,7 +1,18 @@
 import { z } from 'zod'
+import { reportBases } from './basis'
+import { transferInfoSchema } from './transfers'
 
 export const transactionTypes = ['expense', 'income'] as const
 export type TransactionType = (typeof transactionTypes)[number]
+
+/*
+ * Ordem na tela: primeiro o que entra, depois o que sai. A ordem de `transactionTypes`
+ * define o enum do banco e por isso não muda.
+ */
+export const transactionTypesInOrder = [
+  'income',
+  'expense',
+] as const satisfies readonly TransactionType[]
 
 export const isTransactionType = (value: unknown): value is TransactionType =>
   value === 'expense' || value === 'income'
@@ -41,6 +52,8 @@ const transactionFields = z.object({
   amountCents: cents.min(1, 'Informe um valor'),
   description: z.string().trim().max(120, 'Use até 120 caracteres'),
   accountId: z.uuid().nullable(),
+  /** Quem recebeu ou pagou (ver contacts.ts) */
+  contactId: z.uuid().nullable().default(null),
   purchaseDate: z.iso.date('Data inválida'),
   paymentDate: z.iso.date('Data inválida').nullable(),
   splits: z
@@ -73,10 +86,19 @@ export const transactionFormSchema = transactionFields.superRefine((values, ctx)
 export type TransactionFormValues = z.input<typeof transactionFormSchema>
 export type TransactionInput = z.output<typeof transactionFormSchema>
 
+export const transactionOrigins = ['manual', 'ofx', 'bank'] as const
+export type TransactionOrigin = (typeof transactionOrigins)[number]
+
 export const transactionSchema = transactionFields.omit({ installments: true }).extend({
   id: z.string(),
+  /** De onde veio: digitado no app, lido de um extrato ou trazido do banco conectado */
+  origin: z.enum(transactionOrigins),
+  /** Identificador do lançamento no extrato do banco (FITID), quando veio de importação */
+  externalId: z.string().nullable(),
   // Fatura em que caiu (mês do vencimento), só para cartão de crédito
   statementMonth: z.string().nullable(),
+  /** Preenchido quando o lançamento é uma das pernas de uma transferência entre contas */
+  transfer: transferInfoSchema.nullable(),
   // Parcela "3 de 10" de uma compra parcelada; nulo = lançamento avulso
   installment: z.object({ groupId: z.string(), number: z.number(), count: z.number() }).nullable(),
   createdBy: z.string(),
@@ -91,6 +113,20 @@ export const transactionListQuerySchema = z.object({
   accountId: z.uuid().optional(),
   // "statement": a fatura do cartão (accountId) que vence no mês, em vez das compras do mês
   view: z.enum(['month', 'statement']).default('month'),
+  /*
+   * Recorte usado ao abrir o detalhe de um número do relatório: um intervalo de datas
+   * fechado, uma categoria (com as subcategorias dela junto) e um tipo.
+   */
+  from: z.iso.date('Data inválida').optional(),
+  to: z.iso.date('Data inválida').optional(),
+  categoryId: z.uuid().optional(),
+  /** Só os que ficaram sem categoria (a linha "Sem categoria" do relatório) */
+  uncategorized: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
+  type: z.enum(transactionTypes).optional(),
+  basis: z.enum(reportBases).default('accrual'),
 })
 
 // Parcelas: editar vale para uma ou para a série; excluir pode ser uma, esta e as próximas, ou todas

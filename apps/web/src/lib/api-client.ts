@@ -38,8 +38,16 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   if (!response.ok) {
     const details =
       typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {}
+    /*
+     * Sem { error } no corpo, quem respondeu não foi a API: é o proxy do dev ou o servidor
+     * fora do ar. Dizer isso ajuda mais do que "não foi possível".
+     */
     const message =
-      typeof details.error === 'string' ? details.error : 'Não foi possível concluir a ação.'
+      typeof details.error === 'string'
+        ? details.error
+        : response.status >= 500
+          ? 'O servidor não respondeu. Ele pode estar reiniciando — tente de novo em instantes.'
+          : 'Não foi possível concluir a ação.'
     const field = typeof details.field === 'string' ? details.field : undefined
     if (response.status === 401) throw new UnauthorizedError(401, message)
     if (field) throw new FieldValidationError(field, message)

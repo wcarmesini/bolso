@@ -2,7 +2,6 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { LoginPage } from '@/features/auth/components/login-page'
 import { meQuery } from '@/features/auth/queries'
-import { UnauthorizedError } from '@/lib/api-client'
 
 // "continuar" guarda a tela que a pessoa tentou abrir antes de entrar;
 // "error" vem do provedor quando a entrada não foi concluída (ver auth.ts: onAPIError)
@@ -14,14 +13,13 @@ const searchSchema = z.object({
 export const Route = createFileRoute('/entrar')({
   validateSearch: searchSchema,
   beforeLoad: async ({ context, search }) => {
-    try {
-      await context.queryClient.ensureQueryData(meQuery)
-      // Já está logado: não faz sentido ficar na tela de login
-      throw redirect({ to: search.continuar ?? '/' })
-    } catch (error) {
-      if (error instanceof UnauthorizedError) return
-      throw error
-    }
+    /*
+     * Não deu para saber quem está logado? Mostra o login — é para onde a pessoa ia de todo
+     * jeito. Errar aqui (API reiniciando, rede caindo) não pode virar tela de erro.
+     */
+    const me = await context.queryClient.ensureQueryData(meQuery).catch(() => null)
+    // Já está logado: não faz sentido ficar na tela de login
+    if (me) throw redirect({ to: search.continuar ?? '/' })
   },
   component: LoginRoute,
 })

@@ -17,10 +17,14 @@ Sistema de **orçamento colaborativo**: **leve, rápido, bonito e em tempo real*
 | Tempo real | ✅ WebSocket por grupo, testado com duas pessoas: a mudança aparece na outra tela em ~15ms |
 | Login | ✅ Sessões com Better Auth. **Google configurado** (em desenvolvimento); faltam Apple e Microsoft (ver [Pendências](#pendências)). A tela de login só tem os botões dos provedores |
 | Grupos | ✅ Grupo pessoal no primeiro acesso, convite por link, troca de grupo |
-| Ajustes | ✅ Perfil, Grupo, Categorias, Contas e Chaves de API, tudo gravando no banco |
-| **Lançamentos** | ✅ Cartão de crédito com fatura, compras parceladas e lançamento dividido em categorias, em tempo real |
+| Ajustes | ✅ Perfil, Grupo, Categorias, Contas, Contatos, Integrações e Chaves de API, tudo gravando no banco |
+| **Lançamentos** | ✅ Cartão de crédito com fatura, compras parceladas, lançamento dividido em categorias, cópia de lançamento e contato, em tempo real |
+| **Importar extrato (OFX)** | ✅ Lê o arquivo do banco, concilia com o que já foi lançado e importa o resto |
+| **Banco conectado (Open Finance)** | ✅ Pluggy. O Bolso busca sozinho e o que chega **espera aprovação**; nada entra no orçamento sem alguém dizer que pode |
+| **Chaves da API do Bolso** | ✅ Outro programa chama a nossa API com `Authorization: Bearer`, com permissão de leitura ou de escrita |
 | **Orçamento** | ✅ Limite por categoria, valendo do mês em diante, com a barra de uso |
-| **Relatórios** | ✅ Fluxo de caixa, gastos por categoria, orçado × realizado e gastos por pessoa |
+| **Relatórios** | ✅ Seis: fluxo de caixa, mês a mês por categoria, **evolução patrimonial**, gastos por categoria, orçado × realizado e gastos por pessoa |
+| **Rastro e lixeira** | ✅ Quem criou, quem mudou o quê e quando. Excluir marca em vez de apagar, e a lixeira traz de volta |
 | Painel | ⏳ Tela criada, ainda vazia |
 | Instalação no celular (PWA) | ✅ Ícones, manifesto, service worker e convite de instalação |
 
@@ -112,9 +116,11 @@ Valem desde o primeiro dia:
 - **Valores em centavos inteiros**, nunca float: R$ 10,50 vira `1050`. Assim não há erro de arredondamento. O campo `MoneyInput` já digita assim, como em app de banco.
 - **Tudo filtrado por grupo no backend**, para ninguém ver dados de outro grupo.
 - **Uma validação só:** o schema Zod fica em `packages/shared` e vale para o formulário e para a rota. Nada de validar duas vezes, de dois jeitos.
+- **Um componente por campo, ligado só ao próprio valor** (`useController`/`useWatch` em `transaction-form-fields.tsx`): digitar o valor não repinta categoria, conta nem contato — o formulário inteiro nunca re-renderiza por causa de uma tecla. O que é caro de montar (o calendário) entra sob demanda, com `lazy()`.
 - **Datas sempre pelas partes locais** (`lib/dates.ts`), nunca `toISOString()`: ele converte para UTC e um lançamento feito às 22h cairia no dia seguinte.
 - **Formulários com fonte de 16px no celular.** Abaixo disso, o iPhone dá zoom automático ao tocar no campo. O `Input` do shadcn já faz isso.
 - **Nunca `window.confirm()`.** Exclusões usam o `ConfirmDeleteDialog`.
+- **Todo campo vem do shadcn**, nunca do navegador: data usa o `DateField` (Popover + Calendar, em português, com mês e ano em lista), mês usa o `MonthPicker`, e categoria usa o `CategoryPicker` com busca. Os campos nativos (`<input type="date">`, `type="month"`) trazem a caixa e o ícone do navegador e destoam do resto.
 - **Ações de cada linha** (`RowActions`): no computador, ícones pequenos e juntos ✏️ ＋ 🗑️ **logo após o nome, só com o mouse sobre a linha**; no celular, **tocar na linha abre um menu** com as mesmas ações. Nada fica visível em todas as linhas. A linha precisa de `group/row relative`.
 - **Só o conteúdo rola**, entre a barra superior e as abas (`AppShell`): a barra de rolagem começa abaixo do menu, que ocupa sempre a largura toda. O espaço da barra fica reservado dos dois lados do conteúdo (`scrollbar-gutter: stable both-edges`), então nada pula para o lado e o conteúdo segue alinhado com o menu. Barra fina, nas cores do tema. Ao trocar de tela, o conteúdo volta ao topo (`scrollToTopSelectors` do router).
 
@@ -132,12 +138,19 @@ Tudo em **PostgreSQL**, com **Drizzle** para o SQL tipado e as migrations.
 
 | Tabela | Para quê |
 |---|---|
-| `categories` | Mercado, Moradia… `parent_id` nulo = principal (tem ícone e cor); preenchido = subcategoria (um nível só) |
+| `categories` | Mercado, Moradia… `parent_id` nulo = principal (tem ícone e cor); preenchido = subcategoria (um nível só). `icon` e `color` são **texto**, não enum: a cor é um hex livre e a lista de ícones cresce sem migração. `position` guarda a ordem escolhida arrastando |
 | `accounts` | Conta corrente, poupança, cartão, dinheiro, investimento, com saldo inicial em centavos. Cartão guarda `closing_day`, `due_day` e `limit_cents` |
-| `integration_keys` | Chaves de serviços externos, **criptografadas** (ver [Segurança](#segurança)) |
-| `transactions` | Valor, tipo, conta, **data da compra**, **data do pagamento** e quem lançou. No cartão, `statement_month` (a fatura, pelo mês do vencimento). Parcelas: `installment_group_id`, `installment_number` e `installment_count` ("3 de 10") |
+| `integration_keys` | Chaves de serviços externos (Pluggy, IA…), **criptografadas** (ver [Segurança](#segurança)). `client_id` guarda a parte pública das chaves de Open Finance |
+| `api_keys` | Chaves **da nossa API**, para outro programa entrar no lugar da pessoa. Fica só o hash (SHA-256): a chave inteira aparece uma vez, na criação |
+| `bank_connections` | Uma conta do banco ligada a uma conta do Bolso (Pluggy). Guarda o `item_id`, o estado da conexão, a **data a partir da qual buscar** e a última busca |
+| `pending_transactions` | **A caixa de entrada:** o que o banco mandou e ainda não virou lançamento. Aprovado ou dispensado, a linha fica marcada — é o que impede a busca seguinte de trazer tudo de novo |
+| `import_batches` · `import_batch_items` | Cada confirmação e o que ela fez, linha por linha. É o que permite **desfazer** uma leva inteira em vez de apagar lançamento por lançamento |
+| `audit_log` | O rastro: quem fez o quê, em que coisa, e **o que mudou** (campo, de, para). É daqui que sai "você criou, a Débora trocou a descrição na terça" |
+| `transactions` | Valor, tipo, conta, contato, **data da compra**, **data do pagamento** e quem lançou. `origin` diz se foi digitado ou importado, e `external_id` guarda o identificador do banco (FITID). No cartão, `statement_month` (a fatura, pelo mês do vencimento). Parcelas: `installment_group_id`, `installment_number` e `installment_count` ("3 de 10"). `transfer_group_id` liga as duas pernas de uma transferência entre contas |
+| `contacts` | Quem recebe ou paga (mercado, escola, cliente), com tipo, documento e observação |
 | `transaction_splits` | **As partes do lançamento, uma por categoria.** Lançamento comum tem uma parte; dividido tem várias, somando o valor dele. A categoria mora aqui, não no lançamento |
-| `budgets` | Limite por categoria principal, **valendo do mês (`AAAA-MM`) em diante** até ser trocado. `limit_cents` nulo encerra o limite a partir daquele mês |
+| `budgets` | Orçamento de uma categoria (principal ou sub, de saída ou de entrada), **valendo do mês (`AAAA-MM`) em diante** até ser trocado. `limit_cents` nulo encerra o orçamento a partir daquele mês |
+| `budget_items` | Detalhamento do orçamento ("Salário Débora", "Salário Wilson"). Havendo itens, o valor do orçamento é a soma deles |
 
 **Tabelas de login e grupos** (`auth.ts`): `user`, `session`, `account`, `verification`, `organization`, `member`, `invitation`. São geradas pelo próprio Better Auth — **não edite à mão**; para atualizar, use `apps/api/scripts/auth-schema.config.ts` com o CLI dele.
 
@@ -148,6 +161,7 @@ Tudo em **PostgreSQL**, com **Drizzle** para o SQL tipado e as migrations.
 - **Nome repetido é barrado pelo banco**, por índices únicos sobre `name_key` (nome sem acento e em minúsculas): "Mercado" e "mercado" são o mesmo nome. A API checa antes para dar uma mensagem clara, e o índice segura o caso raro de duas pessoas criando o mesmo nome no mesmo instante — esse erro vira um 409 com mensagem pronta.
 - Apagar uma categoria principal apaga as subcategorias; apagar uma conta ou categoria usada num lançamento **não apaga o lançamento**, só deixa o campo vazio (a parte cai em "Sem categoria").
 - **As partes somam o valor do lançamento**, sempre. A API recusa uma divisão que não feche e a mesma categoria duas vezes.
+- **O mesmo lançamento do banco não entra duas vezes:** índice único por grupo, conta e `external_id`. Reimportar o arquivo é seguro.
 
 **Migrations com dados:** a `0001` criou `transaction_splits` e **copiou a categoria de cada lançamento existente** para uma parte; só a `0002` removeu a coluna antiga. Foi ensaiada numa cópia do banco antes de rodar no de verdade.
 
@@ -167,14 +181,28 @@ Tudo fica em `/api`, no mesmo domínio da web (em desenvolvimento o Vite repassa
 | `/api/invitations/:id` (+ `/accept`) | Ver e aceitar um convite pelo link |
 | `/api/categories` | Lista, cria, edita e exclui (inclusive subcategorias) |
 | `/api/accounts` | Contas |
-| `/api/integration-keys` | Chaves de serviços externos |
+| `/api/integration-keys` | Chaves de serviços externos (Pluggy, IA…) |
+| `/api/api-keys` | Chaves da API do Bolso: cria (devolve o token uma vez), lista e revoga |
+| `/api/bank` | Bancos conectados e se já dá para conectar (chave do Pluggy cadastrada) |
+| `/api/bank/connect-token` | Token do widget do Pluggy (30 min). O Client Secret **nunca** sai do servidor |
+| `/api/bank/connections/:id/pending` | O que espera aprovação nesta conexão, já conciliado com o que existe |
+| `/api/bank/connections/:id/approve` | Aprova, concilia, transfere ou dispensa cada linha da caixa de entrada |
+| `/api/imports/history` | As últimas 50 importações, com o resumo do que cada uma fez |
+| `/api/imports/history/:id/undo` | Desfaz uma importação inteira e devolve tudo para a fila |
+| `/api/contacts` | Contatos do grupo |
+| `/api/imports/ofx/preview` | Lê o extrato e classifica cada linha: nova, parecida com um lançamento existente, ou já importada |
+| `/api/imports/ofx/confirm` | Aplica as decisões: cria, concilia ou ignora cada linha |
 | `/api/transactions` | Lançamentos. `?month=` filtra o mês; `&accountId=` uma conta; `&view=statement` devolve **a fatura** do cartão que vence no mês. Criar com `installments: 10` gera as 10 parcelas numa transação só do banco. Editar aceita `?scope=one\|all` e excluir `?scope=one\|following\|all` (parcela, esta e as próximas, série inteira) |
 | `/api/budgets` | `GET ?month=` devolve o limite que vale no mês (e desde quando); `PUT` define do mês em diante |
 | `/api/reports/cash-flow?year=` | Entradas e saídas mês a mês, pelo dia em que o dinheiro se move |
+| `/api/reports/net-worth?start=&count=&interval=` | O saldo de cada conta ao fim de cada período, o que se deve e o que sobra |
+| `/api/transactions/:id/history` | O rastro de um lançamento |
+| `/api/transactions/deleted` · `/:id/restore` | A lixeira e a volta |
+| `/api/reports/monthly?start=&count=&interval=` | Cada categoria por período (tabela cruzada). `interval` junta meses: `month`, `quarter` ou `year` |
 | `/api/reports/categories?month=&type=` | Total por categoria principal, com as subcategorias dentro |
-| `/api/reports/budget?month=` | Orçado × realizado por categoria principal de despesa |
+| `/api/reports/budget?month=` | Orçado × realizado em árvore (principal com as subcategorias), separando saídas e entradas |
 | `/api/reports/people?month=` | Quanto cada pessoa do grupo lançou |
-| `POST /api/dev/sign-in` | Entra só com o nome e o e-mail, **sem tela**: existe para os testes automáticos. Nunca existe em produção |
+| `POST /api/dev/sign-in` | Entra só com o nome e o e-mail, **sem tela**: existe para os testes automáticos. Nunca existe em produção, e **só responde a quem chama da própria máquina** (por causa do túnel, ver [Abrir no celular](#abrir-no-celular)) |
 
 **Como está organizada:**
 
@@ -183,7 +211,7 @@ Tudo fica em `/api`, no mesmo domínio da web (em desenvolvimento o Vite repassa
 - Depois de gravar, a rota chama `notify(...)`, que avisa o grupo pelo WebSocket.
 - `buildApp(deps)` recebe as dependências prontas, então os testes sobem a API inteira com um banco em memória.
 
-**Regras de negócio que a API garante:** as categorias de um lançamento precisam ser do mesmo tipo dele (não dá para pôr salário numa categoria de despesa); no cartão, a data de pagamento é **calculada** (o vencimento da fatura), não informada; mudar o fechamento ou o vencimento de um cartão move as compras das faturas ainda abertas (as passadas ficam); orçamento só em categoria principal de despesa; trocar o tipo de uma categoria arrasta as subcategorias junto, numa transação só; e um convite só pode ser aceito uma vez.
+**Regras de negócio que a API garante:** as categorias de um lançamento precisam ser do mesmo tipo dele (não dá para pôr salário numa categoria de despesa); no cartão, a data de pagamento é **calculada** (o vencimento da fatura), não informada; mudar o fechamento ou o vencimento de um cartão move as compras das faturas ainda abertas (as passadas ficam); o orçamento da principal e o das subcategorias precisam fechar (a soma das filhas não pode passar do orçamento próprio da principal, nem a principal ser baixada abaixo do que já foi orçado nelas); trocar o tipo de uma categoria arrasta as subcategorias junto, numa transação só; e um convite só pode ser aceito uma vez.
 
 ---
 
@@ -197,7 +225,28 @@ As regras de dinheiro moram em `packages/shared` (`cards.ts`, `allocation.ts`, `
 - Cada compra cai sozinha na fatura certa. Regra dos bancos: compra **no dia do fechamento ou depois** já vai para a fatura seguinte. Fechamento no dia 31 vira o último dia do mês em fevereiro.
 - A fatura é chamada pelo **mês do vencimento**, como as pessoas falam: "a fatura de outubro" é a que vence em outubro.
 - As duas datas continuam separadas: o **orçamento** conta pela data da compra; o **fluxo de caixa** conta pelo vencimento da fatura, que é quando o dinheiro sai.
+- É por isso que o mês a mês tem **regime**: em *competência* a compra conta no mês em que foi feita; em *caixa*, no mês em que o dinheiro sai — a fatura do cartão inteira pula para o mês do vencimento. Sem data de pagamento, vale a data da compra (`packages/shared/src/basis.ts`).
 - Estorno ou cashback no cartão é lançado como receita nele e abate da fatura.
+
+**Transferência entre contas**
+
+- Dinheiro que só muda de lugar: sai de uma conta e entra em outra. No banco são **dois lançamentos** com o mesmo `transfer_group_id` — uma saída na origem e uma entrada no destino —, para o extrato de cada conta ficar certo.
+- **Não é gasto nem ganho**, então fica de fora do orçamento, de todos os relatórios e do resumo do mês. Sem isso, guardar R$ 1.000 na poupança pareceria gastar e receber R$ 1.000 no mesmo dia.
+- Nenhuma das pernas tem categoria — é justamente o que as mantém fora dos relatórios por categoria.
+- Na lista, sem filtro de conta, aparece **uma linha só**, com o caminho ("Conta corrente → Poupança") e o valor em tom neutro. Filtrando por conta, cada lado aparece no extrato dela, como num banco.
+- Editar e excluir valem para as duas pernas ao mesmo tempo: meia transferência não existe.
+
+**Importar extrato (OFX)**
+
+- O leitor deixa de fora as **linhas de saldo** que vários bancos mandam como se fossem lançamentos ("Saldo do dia", "Saldo Anterior"): são a foto da conta, não dinheiro entrando ou saindo. A tela diz quantas foram ignoradas, para ninguém achar que sumiu algo.
+- **Fecha a conta do extrato**: saldo anterior mais o movimento tem que dar o saldo final que o banco informa. Quando fecha, a tela diz — é a prova de que nada se perdeu na leitura.
+- **FITID vazio ou repetido** (os dois acontecem) ganha um identificador derivado da própria linha, estável entre importações: nenhuma linha some por colidir com outra.
+- Quando o banco manda em `DTSTART`/`DTEND` o dia da exportação em vez do período, **as datas dos lançamentos é que valem**.
+- A descrição junta o que o banco separa: `NAME` é o tipo da linha ("Pix - Enviado") e `MEMO` tem o resto, do qual saem a data, a hora e o CPF/CNPJ que vêm na frente do nome.
+- A codificação é decidida **pelo conteúdo**, não pelo cabeçalho: o arquivo é lido como UTF-8 estrito e, se os bytes não formarem UTF-8 válido, vale windows-1252. Cabeçalho de OFX erra e mente, e errar aqui estraga todo acento ("Aplicação" virando "AplicaÃ§Ã£o").
+- **O par é escolhido pelo conjunto, não pela ordem do arquivo.** Cada combinação possível (linha do extrato × lançamento já feito) recebe uma nota — distância entre as datas e palavras em comum nas descrições — e os melhores pares são fixados primeiro, no arquivo inteiro. Do jeito antigo, a primeira linha escolhia primeiro e levava um lançamento que combinava muito mais com outra logo abaixo; as duas saíam erradas.
+- **Nenhum palpite é definitivo.** Cada linha tem um `✕` para desfazer o par e um **Trocar par**, que abre a lista dos lançamentos do período — os de mesmo valor em cima, marcados, e busca por descrição ou valor. Um lançamento pertence a uma linha só: escolhê-lo aqui o solta de onde estava, sem precisar desfazer nada antes. A conta de "sem par" acompanha as escolhas na hora.
+- A tela separa o extrato em **já parecem lançados**, **novos** e **já importados antes**, com a linha que vai ser conciliada destacada e ligada ao lançamento existente. E mostra, à parte, **o que está no Bolso e não apareceu no extrato** — é ali que aparece o valor digitado errado, a conta trocada ou a compra que o banco ainda não processou.
 
 **Parcelado**
 
@@ -212,7 +261,99 @@ As regras de dinheiro moram em `packages/shared` (`cards.ts`, `allocation.ts`, `
 - Parcelado e dividido juntos: cada parcela é repartida na mesma proporção, sem perder centavo (método do maior resto).
 - Relatórios e orçamento somam as partes: cada categoria recebe exatamente o pedaço dela.
 
-**O que ficou de fora, de propósito:** transferência entre contas (ex.: pagar a fatura com a conta corrente) e saldo por conta. O pagamento da fatura não precisa ser lançado — as compras já são as despesas; lançá-lo de novo contaria duas vezes. Quando houver saldo por conta, a transferência entra junto.
+**Sobre o pagamento da fatura:** ele não precisa ser lançado como despesa — as compras já são as despesas, e lançá-lo de novo contaria duas vezes. Quem quiser registrar o dinheiro saindo da conta corrente usa uma **transferência** (abaixo), que não entra em relatório nem em orçamento. **O que ainda ficou de fora:** saldo por conta.
+
+---
+
+## Trazer do banco: conectado ou por arquivo
+
+São dois caminhos para a mesma pergunta — *isto é novo, ou já está lançado?* — e a tela de
+conferência (`/importar`) é a mesma para os dois.
+
+**Banco conectado (Open Finance, via Pluggy).** A pessoa cadastra o Client ID e o Client
+Secret em *Ajustes → Integrações*, conecta o banco pelo widget do Pluggy e diz qual conta de
+lá é qual conta daqui — e **desde quando** buscar, para a caixa de entrada não nascer com dois
+anos de histórico. Daí em diante o Bolso busca sozinho a cada 30 minutos.
+
+O que ele acha **não entra no orçamento**: fica na caixa de entrada esperando aprovação, com o
+palpite de conciliação já feito. Um aviso discreto aparece na barra de cima quando há algo
+esperando. Aprovar cria o lançamento, conciliar gruda no que já existia, e dispensar descarta —
+nos três casos a linha fica marcada no banco de dados, e é isso que impede a busca seguinte de
+trazer tudo de novo.
+
+Duas regras do lado do servidor: o **Client Secret nunca sai dele** (o navegador recebe apenas
+um `connectToken` de 30 minutos), e cada busca reconfere os **últimos 7 dias** além do que
+ainda não viu, porque banco mexe no que mandou há pouco (muda a descrição, ajusta o valor de
+uma compra internacional).
+
+**Depois × Dispensar.** São coisas diferentes, e a tela diz qual é qual. *Depois* deixa a
+linha como está: ela não entra na confirmação e continua esperando na próxima vez. *Dispensar*
+resolve a linha para sempre — sai da fila e não volta, porque aquilo não interessa. No extrato
+OFX só existe *Ignorar*, que é ficar de fora daquela importação: o arquivo continua no
+computador e pode ser lido de novo.
+
+**Histórico, com volta.** Cada confirmação vira um lote (`import_batches`), com o que ela fez e
+o suficiente para andar para trás. **Desfazer** apaga os lançamentos que nasceram dali (a
+transferência perde as duas pernas), solta os que foram conciliados — o lançamento fica, só
+perde o vínculo com o banco — e devolve tudo para a fila, inclusive o que foi dispensado. O que
+alguém já tinha apagado na mão é contado à parte, em vez de fazer o desfazer inteiro falhar.
+
+**Uma compra, duas cobranças.** Acontece: a pessoa paga a carne, decide levar mais um pedaço,
+e o banco cobra duas vezes — mas no Bolso existe **um** lançamento, feito à mão, com o valor
+cheio. Conciliar um-para-um não resolve, porque nenhuma das linhas bate com ele sozinha. Então
+escolhe-se o **mesmo lançamento nas duas linhas** (o seletor oferece "juntar com «…»" quando
+ele já é de outra linha) e ele se **divide**: a primeira parte continua sendo ele, com o valor
+reduzido, e cada linha a mais vira uma parte nova — mesma data, mesma categoria, mesmo contato.
+No fim, o Bolso mostra os mesmos dois movimentos que o banco mostra, cada um com o seu
+identificador. A tela só deixa confirmar quando as partes somam o valor do lançamento, e
+desfazer pelo histórico devolve o valor inteiro e apaga as partes.
+
+**Detalhar antes de aprovar.** Ao lado da categoria, um lápis abre o **formulário completo**
+já preenchido com o que o banco mandou (valor, data, descrição, conta). Serve para o que a
+linha sozinha não diz: contato, parcelas, divisão em categorias, uma observação. Ao salvar, o
+lançamento passa a existir e a linha fica **conciliada** com ele — nada entra duas vezes. Quem
+só precisa da categoria continua resolvendo no próprio seletor, sem abrir nada.
+
+**Cartão de crédito.** Cada compra cai na fatura do próprio mês, pelo dia de fechamento do
+cartão — importar três meses de uma vez continua certo, porque a conta é feita compra a compra
+(e o dia do fechamento separa: comprou no dia 4 vai para esta fatura, no dia 5 vai para a
+seguinte).
+
+**Transferência e pagamento de fatura.** Cada linha tem uma quarta saída além de aprovar,
+conciliar e dispensar: **Transferir**. Ela é para dinheiro que só mudou de conta — a fatura do
+cartão saindo da corrente, dinheiro indo para a poupança, um saque. Vira uma transferência de
+duas pernas, sem categoria, e por isso **fica fora dos relatórios e do orçamento**: as compras
+do cartão já são as despesas, e lançar o pagamento da fatura de novo contaria duas vezes.
+
+Só a perna da conta que está sendo conferida leva o identificador do banco. Quando o cartão
+também estiver conectado, a outra ponta aparece na caixa de entrada dele e o Bolso sugere
+conciliar com a perna que a transferência já criou — sem repetir nada.
+
+**Extrato OFX**, para quando o banco não tem Open Finance ou para trazer um histórico antigo de
+uma vez. É o formato que todo banco brasileiro exporta.
+
+**Como o app lê o arquivo.** O leitor é escrito à mão (`packages/shared/src/ofx.ts`), sem
+biblioteca: o OFX 1.x é SGML (tags que não fecham) e o 2.x é XML, e os dois se resolvem com a
+mesma regra — o valor vai da tag até o próximo `<`. Os valores viram centavos por texto, nunca
+por float, porque extrato tem que fechar. O arquivo costuma vir em Latin-1: o app lê os bytes e
+converte com a codificação que o próprio cabeçalho informa, senão "SÃO JOSÉ" viraria "S�O JOS�".
+
+**Conciliar** é dizer "este lançamento do banco é aquele que eu já tinha lançado". O app sugere
+sozinho: mesma conta, mesmo valor, mesmo tipo e data até **4 dias** de diferença (a compra sai
+hoje e cai na conta depois). A descrição não entra na comparação — o banco escreve
+"PAG*MERCADO SAO JOSE" e a pessoa escreveu "Feira da semana".
+
+Cada linha do extrato chega classificada como:
+
+| Situação | O que o app faz |
+|---|---|
+| **Nova** | Sugere importar, e dá para escolher a categoria na hora |
+| **Parecida** | Mostra o lançamento parecido e sugere conciliar (também dá para importar assim mesmo) |
+| **Já importada** | Fica de fora: aquele identificador do banco já entrou antes |
+
+Ao conciliar, o lançamento que você digitou passa a carregar o identificador do banco (FITID).
+Por isso reimportar o mesmo arquivo não duplica nada, e o que foi conciliado aparece como
+"conciliado" na lista (o que veio direto do extrato aparece como "do extrato").
 
 ---
 
@@ -260,7 +401,7 @@ Feitos com **Better Auth**, que grava sessões no próprio banco. O plugin de or
 5. ✅ **Relatórios:** fluxo de caixa, gastos por categoria, orçado × realizado e gastos por pessoa
 6. ✅ **Ajustes:** perfil, grupo, categorias, contas e chaves de API
 
-**Depois do MVP:** recorrências, transferência entre contas e saldo por conta, importação de extrato (OFX/CSV), metas, quem está online agora, lançamentos sem internet e notificações ("Mercado atingiu 80% do orçamento").
+**Depois do MVP:** recorrências, saldo por conta, metas, quem está online agora, lançamentos sem internet e notificações ("Mercado atingiu 80% do orçamento").
 
 ---
 
@@ -281,6 +422,11 @@ Feitos com **Better Auth**, que grava sessões no próprio banco. O plugin de or
 - **Cor forte só em ações**, no **azul da marca `#374DF5`** (o mesmo do logo, nos dois temas). O verde ficou só como cor de categoria. Navegação e textos em tons neutros.
 - **Cores só por tokens do shadcn** (`bg-background`, `text-muted-foreground`, `bg-card`, `bg-primary`…), definidos em `apps/web/src/styles.css`. Nada de cor literal nos componentes.
 - **Tamanhos:** links do menu no padrão do shadcn (36px de altura, fonte de 14px).
+
+### Duas regras que valem em todas as telas
+
+- **Receita antes de despesa.** Entradas aparecem acima das saídas — no orçamento, no formulário de lançamento, nas categorias e nos relatórios. A ordem de `transactionTypes` e `categoryKinds` não muda, porque ela define o `enum` do banco: a tela usa `transactionTypesInOrder` e `categoryKindsInOrder`.
+- **Filtro tem memória.** Todo filtro de **recorte** (tipo, conta, ordem, intervalo, quantidade de períodos) volta como a pessoa deixou, guardado no aparelho pelo hook `useRemembered` (`bolso:filtro:*`). O que é *quando* — mês, ano, início do período — **não** é lembrado: a tela abre sempre perto de hoje, senão se volta a ela no passado sem ter pedido. Um valor salvo que não existe mais (uma conta apagada, uma opção que saiu) é descartado pelo validador do próprio hook.
 
 ### Busca (Ctrl K)
 
@@ -313,13 +459,23 @@ A tela do dia a dia. Tudo dela é de um **mês por vez**, o mesmo recorte do or�
 - **Lista agrupada por dia.** Cada linha: ícone da categoria (ou um ícone de divisão quando há várias), descrição, a parcela ("1/3") e embaixo as categorias ("Mercado + 1"), a conta, **quem lançou** (só quando foi outra pessoa), a fatura ("fatura out/26") ou "a pagar".
 - **Valor com sinal:** `−R$ 250,00` para saída e `+R$ 3.000,00` para entrada, em verde — cor de dado, não de tema (`features/transactions/amount.ts`).
 - **Novo lançamento:** botão na barra no computador e **"+" flutuante** no celular, acima das abas. Com a lista filtrada numa conta, o lançamento novo já vem nela.
-- **Formulário:** tipo, valor, descrição, categoria (ou "Dividir em categorias"), conta, parcelas e datas. Escolhendo um cartão, "Pago em" some e aparece "Cai na fatura de outubro, que vence em 05/10". Trocar o tipo limpa as categorias, porque a API recusa categoria de outro tipo.
+- **Duplicar:** nas ações da linha, a cópia abre um lançamento novo já preenchido (valor, categorias, conta e contato), com a data de hoje — bom para o que se repete sem ser recorrente.
+- **Contato:** quem recebeu ou pagou. O campo busca pelo nome e, se não existir, cria na hora com um clique (o cadastro completo fica em Ajustes → Contatos).
+- **Escolher a categoria é uma busca:** o campo abre uma lista com filtro que ignora acento ("educacao" encontra "Educação"). Quando o texto casa com uma subcategoria, a **principal dela continua na lista**, para se ver de onde ela vem. Numa divisão, a categoria já usada some das outras linhas.
+- **Formulário curto, nada escondido:** tipo; valor e data; descrição; categoria; conta e contato; "pago em" e o botão **Parcelar** (o campo de parcelas só aparece para quem pedir — 1x não é parcelamento). Tudo em duas colunas, inclusive no celular. No cartão, "pago em" some (quem manda é o vencimento da fatura) e entra o aviso de em qual fatura a compra cai. Escolhendo um cartão, "Pago em" some e aparece "Cai na fatura de outubro, que vence em 05/10". Trocar o tipo limpa as categorias, porque a API recusa categoria de outro tipo.
 - **Tempo real:** o que outra pessoa lançar entra na lista, no resumo, no orçamento e nos relatórios sozinho.
+
+- **Um botão para todas as formas de lançar.** "Novo lançamento" abre a despesa, que é o caso comum; a seta ao lado abre o resto — **Entrada**, **Saída**, **Transferência entre contas** e **Importar extrato**. Antes eram três botões soltos na barra; juntos, sobra espaço e fica claro que são variações da mesma coisa. No celular eles ficam no menu ao lado do filtro de conta, e o botão redondo continua sendo o atalho para lançar.
+- **Criar sem sair do lançamento.** Categoria, subcategoria, conta e contato podem nascer no próprio seletor: digite o nome e escolha onde ele entra. Na categoria, o que aparece é **"Criar «…» dentro de"** seguido da lista de grupos — porque o normal é a categoria nova ser uma filha ("Streaming" dentro de "Lazer"), e não mais um grupo solto na raiz. Criar uma principal continua possível, como a última opção da lista. A categoria nasce do tipo do lançamento (receita ou despesa); o grupo da categoria já escolhida no campo vem primeiro, que é o palpite mais provável. Quem criou uma solta por engano conserta em **Ajustes → Categorias → "Mover para dentro de…"**, sem perder os lançamentos que já a usam. A conta nasce como conta comum — cartão pede fechamento e vencimento, e isso fica em Ajustes → Contas. O capricho (ícone, cor, documento, saldo inicial) é lá; aqui o que importa é não perder o fio do lançamento.
 
 ### Orçamento
 
-- **Todas as categorias principais de despesa** aparecem, mesmo sem limite, para poder definir. Tocar numa abre o limite dela.
-- **O limite vale do mês em diante**, até alguém mudar — ninguém redigita o orçamento todo mês. Mudar em outubro não altera setembro. "Tirar limite" encerra dali em diante.
+- **Todas as categorias aparecem**, mesmo sem orçamento, para poder definir. As principais abrem e mostram as subcategorias: dá para orçar no detalhe (só "Restaurante") ou por cima (toda a "Alimentação fora").
+- **Principal com orçamento próprio manda no total dela**; sem ele, vale a soma do que foi orçado nas subcategorias. Assim nada é contado duas vezes.
+- **Entradas primeiro, depois saídas.** Entrada é previsão de receber ("espero R$ 9.000 de salário"), e a barra cheia é coisa boa.
+- **Detalhamento:** em vez de um número solto, o orçamento pode virar uma lista — "Salário Débora R$ 5.000" e "Salário Wilson R$ 4.000". O valor do orçamento passa a ser a soma dos itens; a linha só menciona que existem ("· 2 itens"), e a lista fica no diálogo.
+- **Principal e filhas fecham.** Tendo a principal um orçamento próprio, o diálogo da subcategoria já diz quanto cabe ("Cabe até R$ 700,00 aqui, do orçamento de Alimentação fora"), fica vermelho e trava o Salvar quando passa. O mesmo vale ao contrário: não dá para baixar a principal abaixo do que as filhas já somam. A API recusa nos dois casos — a tela só avisa antes.
+- **O orçamento vale do mês em diante**, até alguém mudar — ninguém redigita tudo todo mês. Mudar em outubro não altera setembro. "Tirar orçamento" encerra dali em diante.
 - Cada categoria mostra "R$ 83,33 de R$ 200,00", a barra e quanto resta ou passou. A barra é verde até 80%, âmbar até 100% e vermelha quando estoura (`components/progress-bar.tsx`).
 - No topo: orçado, gasto e o que resta no mês, e quanto foi gasto em categorias sem limite.
 - Ordem: primeiro as com limite (as mais usadas no topo), depois as que gastaram sem limite, depois o resto.
@@ -331,6 +487,7 @@ Somados no servidor: o navegador recebe só os totais. Todos se atualizam sozinh
 | Relatório | O que mostra |
 |---|---|
 | **Fluxo de caixa** | O ano em barras (entradas × saídas por mês) e a tabela com saldo e acumulado. Conta pelo dia em que o dinheiro se move; os meses futuros aparecem apagados com o que já está agendado (parcelas, faturas, contas a pagar) |
+| **Mês a mês** | Uma tabela: as categorias nas linhas, os períodos nas colunas, o total de cada linha e a variação em relação à coluna anterior. **Clicar num número abre os lançamentos que formam ele** — e a soma bate, porque um lançamento dividido entra com a parte daquela categoria (a lista mostra "de R$ 200,00" ao lado). A barra de cima escolhe **intervalo** (mensal, trimestral, anual), **regime** (competência ou caixa), **início** (o seletor vira mês, trimestre ou ano conforme o intervalo) e **quantas colunas** (de 1 a 13); esses quatro ficam numa peça só, sem rótulo escrito na frente de cada um — "Mensal", "Competência" e "12 meses" já dizem o que são. Ao lado, **abrir/fechar tudo** e os **filtros**: mostrar só entradas ou só saídas; ordenar por maior total, por nome ou pela **estrutura das categorias** (a ordem que você montou arrastando em Ajustes → Categorias, subcategorias incluídas); e mostrar a **Média** (uma coluna) e os percentuais **% do grupo** e **% da receita**. Os percentuais não viram colunas: aparecem **dentro de cada célula**, discretos embaixo do número, para dar para ver o peso de cada linha mês a mês — e não só no total — sem alargar a tabela. O "% do grupo" de uma principal é dentro da seção; o de uma subcategoria, dentro da principal dela. A tabela se arrasta com o mouse, com a mãozinha no cursor. A cor do selo diz se foi bom ou ruim (gastar mais é vermelho, receber mais é verde), não a direção. As principais abrem para mostrar as subcategorias, e a primeira coluna fica parada quando a tabela rola para o lado |
 | **Gastos por categoria** | Uma faixa com a fatia de cada categoria no total e a lista com valor, percentual e as subcategorias dentro da principal. Alterna entre despesas e receitas |
 | **Orçado × realizado** | Cada categoria com limite: orçado, gasto, percentual e diferença. Os gastos em categorias sem limite aparecem à parte. Tem o atalho "Ajustar limites" |
 | **Gastos por pessoa** | Quanto cada pessoa do grupo lançou no mês, com a participação no total. Todo mundo aparece, mesmo zerado |
@@ -347,9 +504,11 @@ Os números de topo das telas usam o mesmo bloco (`components/stat-grid.tsx`), e
 |---|---|
 | **Perfil** | Nome e **foto** (aparecem no avatar, para você e para quem divide o grupo). A foto é escolhida da galeria ou câmera, recortada no centro em quadrado e reduzida para 256×256 (poucos KB), e salva na hora. "Remover" volta às iniciais |
 | **Grupo** | Nome do grupo, quem está nele, convite por link, criar outro grupo e trocar o grupo em uso |
-| **Categorias** | Despesas e receitas com nome, ícone e cor, e **subcategorias** (um nível só). **Só a categoria principal tem ícone e cor**: a subcategoria é só o nome e segue o tipo da principal. Começa com 10 categorias comuns, algumas já com subcategorias (Moradia → Aluguel, Condomínio…). Não deixa repetir nome entre irmãs, ignorando acento e maiúscula. Excluir uma principal exclui as subcategorias junto |
+| **Categorias** | Despesas e receitas com nome, ícone e cor, e **subcategorias** (um nível só). **Só a categoria principal tem ícone e cor**: a subcategoria é só o nome e segue o tipo da principal. São **164 ícones em 10 famílias** (Alimentação, Casa, Contas e serviços…), com busca em português que entende tanto o **significado** quanto o **nome do desenho** — "luz" e "raio" acham Energia, "uber" acha Táxi, "cadeado" acha o cadeado — e sugestões a partir do nome que está sendo digitado. Plural não atrapalha ("Filhos" sugere o bebê), porque a comparação é por radical, e o que casa mais cedo no vocabulário do ícone aparece primeiro. A **cor é livre**: paleta pronta, matiz/intensidade/claridade ou o hex colado. O ícone nunca some: o app mede o **contraste real** (WCAG) da cor contra o fundo do selo em cada tema e clareia ou escurece só o quanto for preciso para passar de 3,6:1 — um rosa clarinho vira magenta no tema claro, um azul-marinho clareia no escuro, e o tom escolhido continua sendo o da pessoa (é ele que aparece nas bolinhas da paleta). A lista se **reordena arrastando** pela alça (mouse, toque ou setas do teclado), e a ordem vale para o grupo inteiro. Arrastando, a categoria vira uma cópia solta na tela, que não é cortada pelas bordas do grupo — e **soltar uma subcategoria em cima de outra principal a muda de lugar**, levando o tipo da nova mãe junto. Nome repetido no destino é recusado, com o aviso dizendo qual é. Começa com 10 categorias comuns, algumas já com subcategorias (Moradia → Aluguel, Condomínio…). Não deixa repetir nome entre irmãs, ignorando acento e maiúscula. Excluir uma principal exclui as subcategorias junto |
 | **Contas** | Conta corrente, poupança, cartão de crédito, dinheiro e investimento, com saldo inicial (exceto cartão, que ganha limite e fatura depois) |
-| **Chaves de API** | Chaves de serviços usados pelo Bolso (Open Finance, IA…). A chave aparece só com o final (••••abcd). Página enxuta: uma linha de descrição e a lista. Ficam **criptografadas no servidor**. Os **tokens de acesso ao Bolso** (para automações e Atalhos do iPhone) entram depois |
+| **Contatos** | Quem recebe ou paga: nome, pessoa ou empresa, documento e observação. Excluir um contato não apaga os lançamentos dele |
+| **Integrações** | Serviços **de fora que o Bolso usa**. Em cima, os bancos conectados (Pluggy) — o que a pessoa de fato quer; embaixo, as chaves que fazem isso funcionar, mostradas só com o final (••••abcd) e **criptografadas no servidor** |
+| **Chaves de API** | O caminho contrário: chaves **do Bolso**, para outro programa (planilha, robô, Atalhos do iPhone) chamar a nossa API no lugar da pessoa. A chave aparece inteira uma vez só; depois fica o começo dela e a data do último uso |
 | **Aplicativo** | Instalação no celular |
 
 **Cores de dados:** a única exceção à regra de "só tokens". São cores do dado, não do tema: as das categorias em `features/categories/colors.ts` e o verde de entrada em `features/transactions/amount.ts`.
@@ -398,7 +557,7 @@ Requisitos: **Node 22+** e **pnpm 10+**. Não precisa instalar banco nem Docker.
 ```bash
 pnpm install        # instala as dependências
 pnpm dev            # sobe a web (5173) e a API (3000) juntas
-pnpm test           # testes da API (43 hoje)
+pnpm test           # testes da API (66 hoje)
 pnpm typecheck      # checa os tipos dos três pacotes
 pnpm lint           # verifica o código com o Biome
 pnpm format         # formata e corrige o que for automático
@@ -411,6 +570,35 @@ Abra **http://localhost:5173** — a web repassa `/api` para a porta 3000 sozinh
 **Para entrar:** use **Continuar com o Google** (exige `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` em `apps/api/.env`). Para testar o tempo real em duas janelas, entre com duas contas Google diferentes, uma delas numa janela anônima.
 
 **Para começar do zero:** pare a API e apague `apps/api/.data`.
+
+### Abrir no celular
+
+`localhost` não serve: no celular, ele é o próprio celular. E pelo IP da rede (`192.168…`) o
+**login com o Google não funciona** — ele só aceita endereço de retorno `http://` quando é
+`localhost` — nem dá para instalar o app, que exige HTTPS.
+
+O caminho é um túnel HTTPS com o **ngrok** (a conta grátis dá um domínio fixo):
+
+1. Criar a conta em ngrok.com, pegar o token e rodar uma vez:
+   `ngrok config add-authtoken SEU_TOKEN`
+2. Reservar o domínio grátis no painel do ngrok (ex.: `bolso-seunome.ngrok-free.app`).
+3. No Google Cloud → Credenciais → seu cliente OAuth, acrescentar em **URIs de redirecionamento**:
+   `https://SEU-DOMINIO.ngrok-free.app/api/auth/callback/google`
+4. Em `apps/api/.env`, trocar o endereço público e manter o localhost na lista de confiança:
+   ```
+   PUBLIC_URL=https://SEU-DOMINIO.ngrok-free.app
+   TRUSTED_ORIGINS=http://localhost:5173,http://localhost:4173
+   ```
+5. Subir o app avisando o domínio ao Vite e ligar o túnel (duas janelas):
+   ```bash
+   BOLSO_TUNNEL_HOST=SEU-DOMINIO.ngrok-free.app pnpm dev
+   ngrok http 5173 --domain=SEU-DOMINIO.ngrok-free.app
+   ```
+
+Aí o app abre no celular pelo endereço `https://`, com login do Google e instalação como
+aplicativo. Com o túnel no ar, o app fica acessível na internet: por isso o login de
+desenvolvimento (`/api/dev/sign-in`) só responde a chamadas da própria máquina — de fora,
+qualquer um entraria informando o e-mail de outra pessoa.
 
 ### Configuração (`.env`)
 
@@ -432,7 +620,7 @@ Componentes novos do shadcn: rodar `pnpm dlx shadcn@latest add <componente>` den
 
 ### Testes
 
-`pnpm test` sobe a API inteira contra um **PGlite em memória** — sem banco externo, sem mock: é o mesmo código que roda em produção. Cobrem o caminho de cada entidade, as regras de negócio (fatura do cartão, parcelas, divisão em categorias, orçamento que vale do mês em diante e os quatro relatórios), o isolamento entre grupos e o tempo real ponta a ponta (dois WebSockets, um aviso, e a checagem de que o aviso de um grupo não vaza para o outro).
+`pnpm test` sobe a API inteira contra um **PGlite em memória** — sem banco externo, sem mock: é o mesmo código que roda em produção. Cobrem o caminho de cada entidade, as regras de negócio (fatura do cartão, parcelas, divisão em categorias, orçamento que vale do mês em diante, os relatórios, e a leitura e conciliação de OFX), o isolamento entre grupos e o tempo real ponta a ponta (dois WebSockets, um aviso, e a checagem de que o aviso de um grupo não vaza para o outro).
 
 ---
 
@@ -496,14 +684,14 @@ Só o `api.ts` de cada funcionalidade conhece a API. As telas não sabem de onde
 ## Pendências
 
 1. **Painel:** a tela inicial do mês (saldo, orçamento e últimos lançamentos). Os dados já existem nos relatórios.
-2. **Transferência entre contas e saldo por conta**, **recorrências** (aluguel, salário, assinaturas) e **importação de extrato OFX**.
+2. **Saldo por conta** e **recorrências** (aluguel, salário, assinaturas). A transferência entre contas já existe; falta o saldo que ela move.
 3. **Login social:** cadastrar o app em cada provedor e preencher as variáveis. Cada um exige um cadastro próprio:
    - **Google:** ✅ feito em desenvolvimento. Para produção, cadastrar também `https://SEU-DOMINIO/api/auth/callback/google` no mesmo cliente OAuth, e publicar a tela de consentimento (em modo "Teste", só os e-mails listados como testadores conseguem entrar).
    - **Microsoft:** registro do app no Microsoft Entra ID (antigo Azure AD). Gratuito.
    - **Apple:** **Apple Developer Program (US$ 99/ano)**, com Services ID e chave privada. Só funciona num domínio com HTTPS, não em `localhost`.
    - Se um dia o app for para a App Store, ter o login da Apple é obrigatório quando há login do Google (regra da Apple), e ele já está previsto.
 4. **Convite por e-mail:** hoje o convite sai como link para copiar. Falta ligar um serviço de envio.
-5. **Tokens de acesso ao Bolso** (para automações e Atalhos do iPhone), que voltam à tela de Chaves de API.
+5. **Aviso do Pluggy por webhook:** hoje a busca é de 30 em 30 minutos. Com um endereço público, o Pluggy avisa na hora em que o banco traz algo novo.
 6. **Deploy:** Docker Compose + Caddy num VPS, com Postgres de verdade e HTTPS.
 7. Aumentar para 44px a área de toque dos botões de ícone no celular (hoje 36px).
 
@@ -512,6 +700,44 @@ Só o `api.ts` de cada funcionalidade conhece a API. As telas não sabem de onde
 ## Observações
 
 - **Local do projeto:** o projeto fica em `sistemadaniel`, dentro do OneDrive. O OneDrive sincroniza o `node_modules`, o que pode deixar instalações lentas e travar arquivos de vez em quando. Se isso acontecer, mover o projeto para uma pasta fora do OneDrive (ex.: `C:\dev\bolso`) resolve.
-- **Uma API por vez.** O PGlite não aceita dois processos na mesma pasta do banco: abrir duas APIs corrompe o banco (erro `RuntimeError: Aborted()`). Para parar, feche o `pnpm dev` com Ctrl+C, que encerra também o vigia (`tsx watch`); matar só o processo da porta 3000 deixa o vigia vivo, e ele reabre a API a cada arquivo salvo. Antes de mexer no banco à mão, pare tudo e faça uma cópia de `apps/api/.data`.
+- **Uma API por vez.** O PGlite não aceita dois processos na mesma pasta do banco: abrir duas APIs corrompe o banco (erro `RuntimeError: Aborted()`). Por isso a API confere a porta 3000 antes de abrir o banco e se recusa a subir se já houver outra, e o Vite fica preso à porta 5173 (numa porta diferente, a API recusaria login e logout). Para parar, feche o `pnpm dev` com Ctrl+C, que encerra também o vigia (`tsx watch`); matar só o processo da porta 3000 deixa o vigia vivo, e ele reabre a API a cada arquivo salvo. Antes de mexer no banco à mão, pare tudo e faça uma cópia de `apps/api/.data`.
 - **Cópia antiga:** existe uma cópia anterior em `C:\dev\bolso`. Esta pasta é a versão atual, e a outra pode ser apagada.
 - **Origem:** o projeto começou avaliando o [fincore](https://github.com/danielboso/fincore), do Daniel, mas foi escrito do zero, porque as premissas (tempo real e orçamento compartilhado) pediam outra arquitetura.
+
+---
+
+## Rastro: quem fez o quê
+
+Orçamento de duas pessoas tem uma pergunta que aparece toda semana: *quem mexeu nisso?*
+Perguntar por mensagem é pior do que abrir e ver. Por isso cada criação, alteração e exclusão
+vira uma linha em `audit_log` com **o que mudou** — campo, de, para — e quem mudou. No
+formulário do lançamento, "Ver o histórico" conta a coisa em português: *"Débora alterou
+descrição: Feira → Feira da semana · 12 set, 14:03"*.
+
+**Excluir não apaga.** O lançamento ganha `deleted_at` e some de todas as telas e de todos os
+relatórios na hora, mas continua no banco: a **Lixeira** (no menu de "Novo lançamento") mostra
+o que foi excluído, por quem, e traz de volta exatamente como estava — com as categorias, que
+nunca foram embora. Vale também para a transferência, cujas duas pernas somem e voltam juntas.
+
+O filtro de excluídos vive em todas as consultas de lançamento — lista, relatórios, orçamento,
+fatura do cartão, conciliação e busca do banco. É a parte perigosa da ideia: basta uma consulta
+esquecer o filtro para um lançamento excluído continuar somando em algum lugar. Por isso o
+teste de lixeira confere justamente isso, no mês a mês e no patrimônio.
+
+**O que ainda não tem rastro:** categoria, conta e contato. A estrutura já aceita (a tabela tem
+`entity`), e eles continuam sendo apagados de verdade — coisas em uso já são protegidas pelo
+próprio banco.
+
+---
+
+## Evolução patrimonial
+
+O mês a mês responde "para onde foi o dinheiro"; este responde **"o que ficou"**. Cada coluna é
+uma foto do fim do período: o que se tem em cima (conta corrente, poupança, dinheiro,
+investimento), o que se deve embaixo (a fatura em aberto de cada cartão, em valor positivo), e
+a diferença — mais a variação em relação à coluna anterior.
+
+O saldo anda pela data em que o dinheiro se move, e aqui a **transferência conta**: passar
+R$ 1.000 da conta para a poupança não muda o patrimônio, mas muda o saldo das duas — e é
+exatamente isso que esta tela mostra. O cartão não tem saldo inicial: fica negativo conforme
+se compra e volta a zero quando a fatura é paga, por isso aparece do lado do que se deve.

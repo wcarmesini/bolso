@@ -1,23 +1,32 @@
-import { type CategoryTotal, isTransactionType, type TransactionType } from '@bolso/shared'
+import {
+  type CategoryTotal,
+  isTransactionType,
+  type TransactionType,
+  transactionTypes,
+} from '@bolso/shared'
 import { ChartPie, Tag } from 'lucide-react'
 import { useState } from 'react'
 import { EmptyState } from '@/components/empty-state'
 import { MonthNav } from '@/components/month-nav'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { categoryColorStyles } from '@/features/categories/colors'
+import { categoryColorVar } from '@/features/categories/colors'
 import { CategoryBadge } from '@/features/categories/components/category-badge'
+import { umDe, useRemembered } from '@/hooks/use-remembered'
 import { currentMonth } from '@/lib/dates'
 import { formatCents, formatShare } from '@/lib/money'
 import { useCategoriesReport } from '../queries'
 
 const typeItems: { value: TransactionType; label: string }[] = [
-  { value: 'expense', label: 'Despesas' },
   { value: 'income', label: 'Receitas' },
+  { value: 'expense', label: 'Despesas' },
 ]
 
 // "Sem categoria" não tem cor própria: fica neutra
+// Sem cor própria ("Sem categoria"), fica neutra
 const swatchOf = (line: CategoryTotal) =>
-  line.color ? categoryColorStyles[line.color].swatch : 'bg-muted-foreground/40'
+  line.color
+    ? { className: 'cat-swatch', style: categoryColorVar(line.color) }
+    : { className: 'bg-muted-foreground/40', style: undefined }
 
 /**
  * Para onde o dinheiro foi no mês, pela data da compra. Um lançamento dividido conta o pedaço
@@ -25,7 +34,11 @@ const swatchOf = (line: CategoryTotal) =>
  */
 export function CategoriesReport() {
   const [month, setMonth] = useState(currentMonth)
-  const [type, setType] = useState<TransactionType>('expense')
+  const [type, setType] = useRemembered<TransactionType>(
+    'categorias:tipo',
+    'expense',
+    umDe(transactionTypes),
+  )
   const { data, isPending, isError } = useCategoriesReport(month, type)
 
   const lines = data?.categories ?? []
@@ -78,8 +91,8 @@ export function CategoriesReport() {
                 <div
                   key={line.categoryId ?? 'sem-categoria'}
                   title={`${line.name}: ${formatShare(line.totalCents, total)}`}
-                  className={swatchOf(line)}
-                  style={{ width: `${(line.totalCents / total) * 100}%` }}
+                  className={swatchOf(line).className}
+                  style={{ ...swatchOf(line).style, width: `${(line.totalCents / total) * 100}%` }}
                 />
               ))}
             </div>
@@ -111,8 +124,11 @@ export function CategoriesReport() {
                     </span>
                     <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                       <div
-                        className={`h-full rounded-full ${swatchOf(line)}`}
-                        style={{ width: `${(line.totalCents / max) * 100}%` }}
+                        className={`h-full rounded-full ${swatchOf(line).className}`}
+                        style={{
+                          ...swatchOf(line).style,
+                          width: `${(line.totalCents / max) * 100}%`,
+                        }}
                       />
                     </div>
                   </span>

@@ -1,4 +1,4 @@
-import { ChartPie, type LucideIcon, Target, TrendingUp, Users } from 'lucide-react'
+import { ChartPie, Landmark, type LucideIcon, Table, Target, TrendingUp, Users } from 'lucide-react'
 
 export type Report = {
   slug: string
@@ -13,6 +13,18 @@ export const reports: Report[] = [
     title: 'Fluxo de caixa',
     description: 'Entradas e saídas mês a mês.',
     icon: TrendingUp,
+  },
+  {
+    slug: 'mes-a-mes',
+    title: 'Mês a mês',
+    description: 'Cada categoria em todos os meses, com variação.',
+    icon: Table,
+  },
+  {
+    slug: 'patrimonio',
+    title: 'Evolução patrimonial',
+    description: 'O saldo de cada conta e o que sobra, mês a mês.',
+    icon: Landmark,
   },
   {
     slug: 'categorias',

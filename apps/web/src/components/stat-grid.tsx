@@ -10,7 +10,12 @@ export type Stat = {
 
 /** Os números do topo de uma tela (entradas, saídas, saldo…), num cartão discreto */
 export function StatGrid({ stats, children }: { stats: Stat[]; children?: ReactNode }) {
-  const columns = stats.length > 3 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'
+  const columns =
+    stats.length > 4
+      ? 'grid-cols-2 sm:grid-cols-5'
+      : stats.length > 3
+        ? 'grid-cols-2 sm:grid-cols-4'
+        : 'grid-cols-3'
   return (
     <div className="flex flex-col gap-3 rounded-xl border bg-card px-4 py-3">
       <dl className={`grid gap-2 ${columns}`}>

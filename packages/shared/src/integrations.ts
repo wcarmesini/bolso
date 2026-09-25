@@ -22,11 +22,17 @@ export const providerMeta: Record<IntegrationProvider, { label: string; category
   other: { label: 'Outro serviço', category: 'Outro' },
 }
 
+/** Serviços que pedem duas partes: um identificador público e a chave secreta */
+export const needsClientId = (provider: IntegrationProvider) =>
+  provider === 'pluggy' || provider === 'belvo'
+
 export const integrationKeyFormSchema = z
   .object({
     provider: z.enum(integrationProviders),
     customProvider: z.string().trim().max(40, 'Use até 40 caracteres'),
     label: z.string().trim().max(40, 'Use até 40 caracteres'),
+    /** Só nos serviços de Open Finance: o Client ID, que não é segredo */
+    clientId: z.string().trim().max(120, 'Use até 120 caracteres').default(''),
     secret: z
       .string()
       .trim()
@@ -37,8 +43,13 @@ export const integrationKeyFormSchema = z
     if (values.provider === 'other' && !values.customProvider) {
       context.addIssue({ code: 'custom', path: ['customProvider'], message: 'Informe o serviço' })
     }
+    if (needsClientId(values.provider) && !values.clientId) {
+      context.addIssue({ code: 'custom', path: ['clientId'], message: 'Informe o Client ID' })
+    }
   })
 export type IntegrationKeyFormValues = z.infer<typeof integrationKeyFormSchema>
+/** O que o formulário carrega antes do schema preencher os padrões (clientId nasce vazio) */
+export type IntegrationKeyFormInput = z.input<typeof integrationKeyFormSchema>
 
 // A API nunca devolve a chave inteira: só os 4 últimos caracteres
 export const integrationKeySchema = z.object({
@@ -46,6 +57,7 @@ export const integrationKeySchema = z.object({
   provider: z.enum(integrationProviders),
   customProvider: z.string(),
   label: z.string(),
+  clientId: z.string(),
   secretLast4: z.string(),
   createdAt: z.string(),
 })

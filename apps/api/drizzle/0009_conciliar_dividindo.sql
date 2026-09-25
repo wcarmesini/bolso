@@ -1,0 +1,1 @@
+ALTER TABLE "import_batch_items" ADD COLUMN "previous_amount_cents" bigint;

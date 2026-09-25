@@ -13,31 +13,38 @@ import {
   transactionListQuerySchema,
 } from '@bolso/shared'
 import { zValidator } from '@hono/zod-validator'
-import { and, desc, eq, gte, inArray, lt } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
-import { categories, transactionSplits, transactions, user } from '../db/schema'
+import { categories, contacts, transactionSplits, transactions, user } from '../db/schema'
 import { type AppEnv, type Deps, HttpError, notify, onInvalid } from '../http'
+import { diferencas, historicoDe, registrar } from '../lib/audit'
 import { accountCycle, cashFields } from '../statements'
 
 type Row = typeof transactions.$inferSelect
 // Dentro de db.transaction(), o "tx" tem a mesma cara do banco
 type Executor = Pick<Database, 'select' | 'insert' | 'update' | 'delete'>
 
-const toTransaction = (
+export const toTransaction = (
   row: Row,
   splits: TransactionSplit[],
   createdByName: string,
+  /** A outra perna, quando este lançamento faz parte de uma transferência */
+  counterpartAccountId: string | null = null,
 ): Transaction => ({
   id: row.id,
   type: row.type,
   amountCents: row.amountCents,
   description: row.description,
   accountId: row.accountId,
+  contactId: row.contactId,
+  origin: row.origin,
+  externalId: row.externalId,
   purchaseDate: row.purchaseDate,
   paymentDate: row.paymentDate,
   splits,
   statementMonth: row.statementMonth,
+  transfer: row.transferGroupId ? { groupId: row.transferGroupId, counterpartAccountId } : null,
   installment:
     row.installmentGroupId && row.installmentNumber && row.installmentCount
       ? {
@@ -67,6 +74,17 @@ async function assertSplitCategories(db: Executor, groupId: string, values: Tran
     const expected = values.type === 'expense' ? 'despesa' : 'receita'
     throw new HttpError(400, `Escolha categorias de ${expected}.`, 'splits')
   }
+}
+
+/** O contato precisa ser do grupo */
+async function assertContact(db: Executor, groupId: string, contactId: string | null) {
+  if (!contactId) return
+  const [contact] = await db
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(and(eq(contacts.id, contactId), eq(contacts.groupId, groupId)))
+    .limit(1)
+  if (!contact) throw new HttpError(400, 'Contato não encontrado.', 'contactId')
 }
 
 /** Mesmas categorias, na mesma proporção, para outro valor (ex.: cada parcela) */
@@ -116,16 +134,84 @@ export function transactionsRoutes(deps: Deps) {
       .from(user)
       .where(inArray(user.id, authorIds))
     const nameById = new Map(authors.map((author) => [author.id, author.name]))
+
+    /*
+     * Transferência: a tela precisa saber a outra ponta ("saiu para o Nubank"), e a outra
+     * perna pode não estar nesta lista — quando se filtra por conta, só uma delas aparece.
+     */
+    const transferIds = [
+      ...new Set(rows.flatMap((row) => (row.transferGroupId ? [row.transferGroupId] : []))),
+    ]
+    const outraPonta = new Map<string, string | null>()
+    if (transferIds.length > 0) {
+      const pernas = await db
+        .select({
+          id: transactions.id,
+          accountId: transactions.accountId,
+          transferGroupId: transactions.transferGroupId,
+        })
+        .from(transactions)
+        .where(inArray(transactions.transferGroupId, transferIds))
+      for (const perna of pernas) {
+        for (const outra of pernas) {
+          if (outra.transferGroupId === perna.transferGroupId && outra.id !== perna.id) {
+            outraPonta.set(perna.id, outra.accountId)
+          }
+        }
+      }
+    }
+
     return rows.map((row) =>
-      toTransaction(row, splitsById.get(row.id) ?? [], nameById.get(row.createdBy) ?? ''),
+      toTransaction(
+        row,
+        splitsById.get(row.id) ?? [],
+        nameById.get(row.createdBy) ?? '',
+        outraPonta.get(row.id) ?? null,
+      ),
     )
   }
+
+  /** Lançamentos que têm ao menos uma parte na categoria pedida (ou sem categoria nenhuma) */
+  const splitCondition = async (
+    groupId: string,
+    categoryId: string | undefined,
+    uncategorized: boolean,
+  ) => {
+    if (uncategorized) {
+      return inArray(
+        transactions.id,
+        db
+          .select({ id: transactionSplits.transactionId })
+          .from(transactionSplits)
+          .where(isNull(transactionSplits.categoryId)),
+      )
+    }
+    if (!categoryId) return undefined
+    const filhas = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(eq(categories.groupId, groupId), eq(categories.parentId, categoryId)))
+    const ids = [categoryId, ...filhas.map((child) => child.id)]
+    return inArray(
+      transactions.id,
+      db
+        .select({ id: transactionSplits.transactionId })
+        .from(transactionSplits)
+        .where(inArray(transactionSplits.categoryId, ids)),
+    )
+  }
+
+  /*
+   * Excluir não apaga: marca `deleted_at`. Todo lugar que lê lançamento precisa deste filtro
+   * — é por isso que ele mora aqui, com nome, em vez de ser repetido solto por aí.
+   */
+  const naoExcluido = isNull(transactions.deletedAt)
 
   const findOwn = async (groupId: string, id: string) => {
     const [row] = await db
       .select()
       .from(transactions)
-      .where(and(eq(transactions.id, id), eq(transactions.groupId, groupId)))
+      .where(and(eq(transactions.id, id), eq(transactions.groupId, groupId), naoExcluido))
       .limit(1)
     if (!row) throw new HttpError(404, 'Lançamento não encontrado.')
     return row
@@ -134,8 +220,15 @@ export function transactionsRoutes(deps: Deps) {
   return (
     new Hono<AppEnv>()
       .get('/', zValidator('query', transactionListQuerySchema, onInvalid), async (c) => {
-        const { month, accountId, view } = c.req.valid('query')
-        const groupFilter = eq(transactions.groupId, c.var.groupId)
+        const { month, accountId, view, from, to, categoryId, uncategorized, type, basis } =
+          c.req.valid('query')
+        const groupId = c.var.groupId
+        const groupFilter = and(eq(transactions.groupId, groupId), naoExcluido)
+        // Caixa lê o dia em que o dinheiro se move; competência, a data da compra
+        const date =
+          basis === 'cash'
+            ? sql`coalesce(${transactions.paymentDate}, ${transactions.purchaseDate})`
+            : sql`${transactions.purchaseDate}`
 
         let where: ReturnType<typeof and>
         if (view === 'statement') {
@@ -150,11 +243,20 @@ export function transactionsRoutes(deps: Deps) {
           )
         } else {
           const range = month ? monthRange(month) : null
+          /*
+           * O detalhe de um número do relatório: a categoria escolhida leva junto as
+           * subcategorias dela, porque na tabela o valor da principal já soma as filhas.
+           */
+          const splitFilter = await splitCondition(groupId, categoryId, uncategorized)
           where = and(
             groupFilter,
+            type ? eq(transactions.type, type) : undefined,
             accountId ? eq(transactions.accountId, accountId) : undefined,
             range ? gte(transactions.purchaseDate, range.from) : undefined,
             range ? lt(transactions.purchaseDate, range.to) : undefined,
+            from ? gte(date, from) : undefined,
+            to ? lte(date, to) : undefined,
+            splitFilter,
           )
         }
 
@@ -171,6 +273,7 @@ export function transactionsRoutes(deps: Deps) {
         const values = c.req.valid('json')
         const groupId = c.var.groupId
         await assertSplitCategories(db, groupId, values)
+        await assertContact(db, groupId, values.contactId)
         const cycle = await accountCycle(db, groupId, values.accountId)
 
         const count = values.installments
@@ -191,6 +294,7 @@ export function transactionsRoutes(deps: Deps) {
                 amountCents,
                 description: values.description,
                 accountId: values.accountId,
+                contactId: values.contactId,
                 purchaseDate,
                 ...cashFields(purchaseDate, informedPayment, cycle),
                 installmentGroupId: seriesId,
@@ -201,6 +305,14 @@ export function transactionsRoutes(deps: Deps) {
               .returning()
             if (!row) throw new HttpError(500, 'Não foi possível salvar o lançamento.')
             await replaceSplits(tx, groupId, row.id, splitsFor(amountCents, values.splits))
+            await registrar(tx, {
+              groupId,
+              entity: 'transaction',
+              entityId: row.id,
+              action: 'create',
+              actorId: c.var.user.id,
+              label: row.description,
+            })
             rows.push(row)
           }
           return rows
@@ -226,6 +338,7 @@ export function transactionsRoutes(deps: Deps) {
           const groupId = c.var.groupId
           const current = await findOwn(groupId, c.req.param('id'))
           await assertSplitCategories(db, groupId, values)
+          await assertContact(db, groupId, values.contactId)
           const cycle = await accountCycle(db, groupId, values.accountId)
 
           const updated = await db.transaction(async (tx) => {
@@ -236,6 +349,7 @@ export function transactionsRoutes(deps: Deps) {
                 amountCents: values.amountCents,
                 description: values.description,
                 accountId: values.accountId,
+                contactId: values.contactId,
                 purchaseDate: values.purchaseDate,
                 ...cashFields(values.purchaseDate, values.paymentDate, cycle),
                 updatedAt: new Date(),
@@ -244,6 +358,33 @@ export function transactionsRoutes(deps: Deps) {
               .returning()
             if (!row) throw new HttpError(404, 'Lançamento não encontrado.')
             await replaceSplits(tx, groupId, row.id, values.splits)
+
+            /*
+             * Só os campos que a pessoa enxerga. As categorias ficam de fora da comparação
+             * porque moram nas partes: dizer "mudou as categorias" já conta a história, e o
+             * detalhe está no próprio lançamento.
+             */
+            const mudou = diferencas(current, row, [
+              'type',
+              'amountCents',
+              'description',
+              'accountId',
+              'contactId',
+              'purchaseDate',
+              'paymentDate',
+              'statementMonth',
+            ])
+            if (mudou.length > 0) {
+              await registrar(tx, {
+                groupId,
+                entity: 'transaction',
+                entityId: row.id,
+                action: 'update',
+                actorId: c.var.user.id,
+                label: row.description,
+                changes: mudou,
+              })
+            }
 
             if (scope === 'all' && current.installmentGroupId) {
               const siblings = await tx
@@ -263,6 +404,7 @@ export function transactionsRoutes(deps: Deps) {
                     type: values.type,
                     description: values.description,
                     accountId: values.accountId,
+                    contactId: values.contactId,
                     ...cashFields(sibling.purchaseDate, sibling.paymentDate, cycle),
                     updatedAt: new Date(),
                   })
@@ -290,31 +432,113 @@ export function transactionsRoutes(deps: Deps) {
         const current = await findOwn(c.var.groupId, c.req.param('id'))
         const series = current.installmentGroupId
 
-        if (scope === 'one' || !series) {
-          await db.delete(transactions).where(eq(transactions.id, current.id))
-        } else if (scope === 'following') {
-          await db
-            .delete(transactions)
-            .where(
-              and(
-                eq(transactions.groupId, c.var.groupId),
-                eq(transactions.installmentGroupId, series),
-                gte(transactions.installmentNumber, current.installmentNumber ?? 1),
-              ),
-            )
-        } else {
-          await db
-            .delete(transactions)
-            .where(
-              and(
-                eq(transactions.groupId, c.var.groupId),
-                eq(transactions.installmentGroupId, series),
-              ),
-            )
+        const marcarExcluido = {
+          deletedAt: new Date(),
+          deletedBy: c.var.user.id,
+          updatedAt: new Date(),
+        }
+        const alvo =
+          scope === 'one' || !series
+            ? eq(transactions.id, current.id)
+            : scope === 'following'
+              ? and(
+                  eq(transactions.groupId, c.var.groupId),
+                  eq(transactions.installmentGroupId, series),
+                  gte(transactions.installmentNumber, current.installmentNumber ?? 1),
+                )
+              : and(
+                  eq(transactions.groupId, c.var.groupId),
+                  eq(transactions.installmentGroupId, series),
+                )
+
+        const excluidos = await db
+          .update(transactions)
+          .set(marcarExcluido)
+          .where(and(alvo, naoExcluido))
+          .returning({ id: transactions.id, description: transactions.description })
+
+        for (const excluido of excluidos) {
+          await registrar(db, {
+            groupId: c.var.groupId,
+            entity: 'transaction',
+            entityId: excluido.id,
+            action: 'delete',
+            actorId: c.var.user.id,
+            label: excluido.description,
+          })
         }
 
         notify(deps, c, 'transactions')
         return c.body(null, 204)
       })
+
+      /*
+       * A lixeira: o que foi excluído nos últimos tempos, com quem excluiu. Restaurar devolve
+       * o lançamento exatamente como estava — as partes nunca foram embora.
+       */
+      .get('/deleted', async (c) => {
+        const rows = await db
+          .select({ transacao: transactions, deletedByName: user.name })
+          .from(transactions)
+          .leftJoin(user, eq(user.id, transactions.deletedBy))
+          .where(and(eq(transactions.groupId, c.var.groupId), isNotNull(transactions.deletedAt)))
+          .orderBy(desc(transactions.deletedAt))
+          .limit(100)
+
+        const ids = rows.map((row) => row.transacao.id)
+        const partes = ids.length
+          ? await db
+              .select()
+              .from(transactionSplits)
+              .where(inArray(transactionSplits.transactionId, ids))
+          : []
+
+        return c.json(
+          rows.map(({ transacao, deletedByName }) => ({
+            id: transacao.id,
+            description: transacao.description,
+            amountCents: transacao.amountCents,
+            type: transacao.type,
+            purchaseDate: transacao.purchaseDate,
+            accountId: transacao.accountId,
+            categoryIds: partes
+              .filter((parte) => parte.transactionId === transacao.id)
+              .map((parte) => parte.categoryId),
+            deletedAt: transacao.deletedAt?.toISOString() ?? null,
+            deletedByName: deletedByName ?? 'alguém',
+          })),
+        )
+      })
+
+      .post('/:id/restore', async (c) => {
+        const [restaurado] = await db
+          .update(transactions)
+          .set({ deletedAt: null, deletedBy: null, updatedAt: new Date() })
+          .where(
+            and(
+              eq(transactions.id, c.req.param('id')),
+              eq(transactions.groupId, c.var.groupId),
+              isNotNull(transactions.deletedAt),
+            ),
+          )
+          .returning({ id: transactions.id, description: transactions.description })
+        if (!restaurado) throw new HttpError(404, 'Lançamento não encontrado na lixeira.')
+
+        await registrar(db, {
+          groupId: c.var.groupId,
+          entity: 'transaction',
+          entityId: restaurado.id,
+          action: 'restore',
+          actorId: c.var.user.id,
+          label: restaurado.description,
+        })
+        notify(deps, c, 'transactions')
+        return c.body(null, 204)
+      })
+
+      /** O histórico de um lançamento: quem criou, quem mudou o quê */
+      .get('/:id/history', async (c) =>
+        c.json(await historicoDe(db, c.var.groupId, 'transaction', c.req.param('id'))),
+      )
   )
 }

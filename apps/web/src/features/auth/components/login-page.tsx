@@ -1,4 +1,5 @@
 import type { AuthProviderId } from '@bolso/shared'
+import { useNavigate } from '@tanstack/react-router'
 import { LoaderCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { errorMessage } from '@/lib/errors'
 import { ProviderNotConfiguredError, signInWithProvider } from '../api'
 import { authProviders } from '../providers'
-import { useAuthProviders } from '../queries'
+import { useAuthProviders, useMe } from '../queries'
 
 /** Motivos com que o provedor pode devolver a pessoa para cá (vêm em ?erro=) */
 const errorMessages: Record<string, string> = {
@@ -24,10 +25,20 @@ type LoginPageProps = {
 export function LoginPage({ continueTo, error }: LoginPageProps) {
   const [pending, setPending] = useState<AuthProviderId | null>(null)
   const { data: available, isPending: loadingProviders } = useAuthProviders()
+  const { data: me } = useMe()
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (error) toast.error(errorMessages[error] ?? 'Não foi possível entrar. Tente de novo.')
   }, [error])
+
+  /*
+   * Quem já tem sessão não precisa entrar de novo. Vale para quem chegou aqui porque a API
+   * estava fora do ar: quando ela volta, esta consulta responde e a pessoa segue viagem.
+   */
+  useEffect(() => {
+    if (me) navigate({ to: continueTo, replace: true })
+  }, [me, continueTo, navigate])
 
   const signIn = async (provider: AuthProviderId, nameWithArticle: string) => {
     setPending(provider)

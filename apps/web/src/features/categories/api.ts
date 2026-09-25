@@ -2,10 +2,9 @@ import type { Category, CategoryFormValues, SubcategoryFormValues } from '@bolso
 import { api } from '@/lib/api-client'
 
 // Camada única de dados das categorias: só este arquivo conhece a API.
-// Ordena no navegador para respeitar acentos em português ("Água" antes de "Banco").
-export async function listCategories() {
-  const categories = await api<Category[]>('/categories')
-  return categories.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+// A lista já vem na ordem certa: a que a pessoa arrastou, com o nome desempatando.
+export function listCategories() {
+  return api<Category[]>('/categories')
 }
 
 export function createCategory(values: CategoryFormValues) {
@@ -22,6 +21,14 @@ export function createSubcategory(parentId: string, values: SubcategoryFormValue
 
 export function updateSubcategory(id: string, values: SubcategoryFormValues) {
   return api<Category>(`/categories/${id}`, { method: 'PATCH', body: values })
+}
+
+/**
+ * Nova ordem de uma lista (as principais de um tipo, ou as filhas de uma principal).
+ * `parentId` vai junto quando uma subcategoria foi arrastada para outra principal.
+ */
+export function reorderCategories({ ids, parentId }: { ids: string[]; parentId?: string }) {
+  return api<void>('/categories/order', { method: 'PUT', body: { ids, parentId } })
 }
 
 // Exclui também as subcategorias (o servidor cuida disso)

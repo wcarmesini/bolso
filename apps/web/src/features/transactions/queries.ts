@@ -3,7 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createTransaction,
   deleteTransaction,
+  getTransactionHistory,
+  listDeletedTransactions,
+  listTransactionSlice,
   listTransactions,
+  restoreTransaction,
+  type TransactionSlice,
   type TransactionView,
   updateTransaction,
 } from './api'
@@ -14,6 +19,15 @@ const viewKey = (view: TransactionView) => ['transactions', view]
 
 export function useTransactions(view: TransactionView) {
   return useQuery({ queryKey: viewKey(view), queryFn: () => listTransactions(view) })
+}
+
+/** Os lançamentos por trás de um número do relatório (só busca com o detalhe aberto) */
+export function useTransactionSlice(slice: TransactionSlice | null) {
+  return useQuery({
+    queryKey: ['transactions', 'slice', slice],
+    queryFn: () => listTransactionSlice(slice as TransactionSlice),
+    enabled: slice !== null,
+  })
 }
 
 // Lançamento mexe em lista, orçamento e relatórios
@@ -48,4 +62,26 @@ export function useDeleteTransaction() {
     mutationFn: ({ id, scope }: { id: string; scope: DeleteScope }) => deleteTransaction(id, scope),
     onSuccess: invalidate,
   })
+}
+
+/** O rastro de um lançamento: só busca quando alguém abre o histórico */
+export function useTransactionHistory(id: string | null) {
+  return useQuery({
+    queryKey: ['transactions', 'history', id],
+    queryFn: () => getTransactionHistory(id as string),
+    enabled: id !== null,
+  })
+}
+
+export function useDeletedTransactions(enabled: boolean) {
+  return useQuery({
+    queryKey: ['transactions', 'deleted'],
+    queryFn: listDeletedTransactions,
+    enabled,
+  })
+}
+
+export function useRestoreTransaction() {
+  const invalidate = useInvalidateMoney()
+  return useMutation({ mutationFn: restoreTransaction, onSuccess: invalidate })
 }

@@ -10,6 +10,7 @@ import {
   NavigationMenuTrigger,
   navigationMenuTriggerStyle,
 } from '@/components/ui/navigation-menu'
+import { InboxBadge } from '@/features/bank/components/inbox-badge'
 import { useSearchShortcut } from '@/hooks/use-search-shortcut'
 import { navItems, reportsNavItem } from '@/lib/nav'
 import { searchShortcutLabel } from '@/lib/platform'
@@ -104,6 +105,9 @@ export function TopBar() {
         </NavigationMenu>
 
         <div className="ml-auto flex items-center gap-1">
+          {/* Aparece só quando o banco trouxe algo que ainda espera aprovação */}
+          <InboxBadge />
+
           {/* Só a lupa, sem campo na barra: a busca abre no centro da tela de qualquer forma */}
           <IconButton
             label="Buscar"

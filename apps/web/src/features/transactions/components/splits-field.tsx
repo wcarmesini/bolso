@@ -1,25 +1,17 @@
 import { MAX_SPLITS, type TransactionFormValues } from '@bolso/shared'
 import { Plus, Split, X } from 'lucide-react'
-import { Controller, type UseFormReturn, useFieldArray } from 'react-hook-form'
+import { useMemo } from 'react'
+import { Controller, type UseFormReturn, useFieldArray, useWatch } from 'react-hook-form'
 import { MoneyInput } from '@/components/money-input'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { useCategories } from '@/features/categories/queries'
 import { formatCents } from '@/lib/money'
-import type { CategoryOption } from '../category-options'
-
-// O Select precisa de um texto em cada opção; "nenhuma" vira null na hora de salvar
-const NONE = 'none'
+import { categoryTree } from '../category-options'
+import { CategoryPicker } from './category-picker'
 
 type SplitsFieldProps = {
   form: UseFormReturn<TransactionFormValues>
-  options: CategoryOption[]
 }
 
 /**
@@ -27,51 +19,42 @@ type SplitsFieldProps = {
  * por categoria com o valor de cada uma (ex.: R$ 300 no mercado = 250 de Mercado + 50 de Casa).
  * A soma precisa bater com o total, e o campo mostra quanto falta distribuir.
  */
-export function SplitsField({ form, options }: SplitsFieldProps) {
+export function SplitsField({ form }: SplitsFieldProps) {
+  const { data: categories = [] } = useCategories()
+  // O tipo vem daqui, e não do diálogo: assim trocar despesa/receita não repinta o resto
+  const type = useWatch({ control: form.control, name: 'type' })
+  const tree = useMemo(() => categoryTree(categories, type), [categories, type])
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'splits' })
-  const amount = form.watch('amountCents')
-  const splits = form.watch('splits')
+  // Só as categorias escolhidas; o valor total é observado à parte, para digitar não
+  // re-renderizar a lista inteira de seletores
+  const splits = useWatch({ control: form.control, name: 'splits' }) ?? []
   const split = fields.length > 1
-  const distributed = splits.reduce((total, item) => total + (item.amountCents || 0), 0)
-  const missing = amount - distributed
 
   const errors = form.formState.errors.splits
   const rootError = errors?.message ?? errors?.root?.message
 
   const categorySelect = (index: number) => {
-    // Cada categoria entra uma vez só: as já usadas nas outras linhas saem da lista
+    // Cada categoria entra uma vez só: as já usadas nas outras linhas não aparecem
     const usedElsewhere = new Set(
       splits.flatMap((item, other) =>
         other !== index && item.categoryId ? [item.categoryId] : [],
       ),
     )
-    const available = options.filter((option) => !usedElsewhere.has(option.value))
     return (
       <Controller
         control={form.control}
         name={`splits.${index}.categoryId`}
         render={({ field }) => (
-          <Select
-            items={[{ value: NONE, label: 'Sem categoria' }, ...available]}
-            value={field.value ?? NONE}
-            onValueChange={(next) => field.onChange(next === NONE ? null : next)}
-          >
-            <SelectTrigger
-              id={index === 0 ? 'transaction-category' : undefined}
-              aria-label={split ? `Categoria ${index + 1}` : undefined}
-              className="w-full min-w-0"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>Sem categoria</SelectItem>
-              {available.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CategoryPicker
+            tree={tree}
+            kind={type}
+            value={field.value}
+            onChange={field.onChange}
+            exclude={usedElsewhere}
+            id={index === 0 ? 'transaction-category' : undefined}
+            label={split ? `Categoria ${index + 1}` : 'Categoria'}
+            invalid={Boolean(rootError)}
+          />
         )}
       />
     )
@@ -87,7 +70,10 @@ export function SplitsField({ form, options }: SplitsFieldProps) {
             variant="ghost"
             size="xs"
             className="-my-1 text-muted-foreground"
-            onClick={() => append({ categoryId: null, amountCents: 0 })}
+            onClick={() => {
+              form.setValue('splits.0.amountCents', form.getValues('amountCents'))
+              append({ categoryId: null, amountCents: 0 })
+            }}
           >
             <Split />
             Dividir em categorias
@@ -128,7 +114,9 @@ export function SplitsField({ form, options }: SplitsFieldProps) {
               onClick={() => {
                 remove(index)
                 // Voltou a ser uma categoria só: ela fica com o valor inteiro
-                if (fields.length === 2) form.setValue('splits.0.amountCents', amount)
+                if (fields.length === 2) {
+                  form.setValue('splits.0.amountCents', form.getValues('amountCents'))
+                }
               }}
             >
               <X />
@@ -145,28 +133,45 @@ export function SplitsField({ form, options }: SplitsFieldProps) {
           className="-ml-2 text-muted-foreground"
           disabled={fields.length >= MAX_SPLITS}
           // A linha nova já vem com o que falta distribuir
-          onClick={() => append({ categoryId: null, amountCents: Math.max(missing, 0) })}
+          onClick={() => {
+            const total = form.getValues('amountCents')
+            const distribuido = form
+              .getValues('splits')
+              .reduce((soma, item) => soma + (item.amountCents || 0), 0)
+            append({ categoryId: null, amountCents: Math.max(total - distribuido, 0) })
+          }}
         >
           <Plus />
           Adicionar categoria
         </Button>
-        <span
-          className={
-            missing === 0
-              ? 'text-muted-foreground'
-              : missing > 0
-                ? 'text-foreground'
-                : 'text-destructive'
-          }
-        >
-          {missing === 0
-            ? 'Tudo distribuído'
-            : missing > 0
-              ? `Falta distribuir ${formatCents(missing)}`
-              : `Passou ${formatCents(-missing)} do total`}
-        </span>
+        <RestanteADistribuir form={form} />
       </div>
       <FieldError errors={[{ message: rootError }]} />
     </Field>
+  )
+}
+
+/** Quanto falta distribuir. Fica separado porque é a única parte que acompanha cada tecla. */
+function RestanteADistribuir({ form }: { form: UseFormReturn<TransactionFormValues> }) {
+  const amount = useWatch({ control: form.control, name: 'amountCents' }) ?? 0
+  const splits = useWatch({ control: form.control, name: 'splits' }) ?? []
+  const missing = amount - splits.reduce((total, item) => total + (item.amountCents || 0), 0)
+
+  return (
+    <span
+      className={
+        missing === 0
+          ? 'text-muted-foreground'
+          : missing > 0
+            ? 'text-foreground'
+            : 'text-destructive'
+      }
+    >
+      {missing === 0
+        ? 'Tudo distribuído'
+        : missing > 0
+          ? `Falta distribuir ${formatCents(missing)}`
+          : `Passou ${formatCents(-missing)} do total`}
+    </span>
   )
 }

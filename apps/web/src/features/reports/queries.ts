@@ -1,6 +1,15 @@
 import type { TransactionType } from '@bolso/shared'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { getBudgetReport, getCashFlow, getCategoriesReport, getPeopleReport } from './api'
+import {
+  getBudgetReport,
+  getCashFlow,
+  getCategoriesReport,
+  getMonthlyReport,
+  getNetWorthReport,
+  getPeopleReport,
+  type MonthlyView,
+  type NetWorthView,
+} from './api'
 
 // Tudo debaixo de ['reports']: um lançamento novo (de qualquer pessoa) recarrega todos.
 // keepPreviousData: ao trocar de mês, os números antigos ficam até os novos chegarem,
@@ -33,6 +42,22 @@ export function usePeopleReport(month: string) {
   return useQuery({
     queryKey: ['reports', 'people', month],
     queryFn: () => getPeopleReport(month),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useMonthlyReport(view: MonthlyView) {
+  return useQuery({
+    queryKey: ['reports', 'monthly', view],
+    queryFn: () => getMonthlyReport(view),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useNetWorthReport(view: NetWorthView) {
+  return useQuery({
+    queryKey: ['reports', 'net-worth', view],
+    queryFn: () => getNetWorthReport(view),
     placeholderData: keepPreviousData,
   })
 }

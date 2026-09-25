@@ -1,13 +1,10 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { StatGrid } from '@/components/stat-grid'
-import { Button } from '@/components/ui/button'
 import { amountTone } from '@/features/transactions/amount'
 import { currentMonth, monthLabel, shortMonthLabel } from '@/lib/dates'
 import { formatCents } from '@/lib/money'
 import { useCashFlow } from '../queries'
-
-const thisYear = () => Number(currentMonth().slice(0, 4))
+import { thisYear, YearNav } from './year-nav'
 
 // Zero vira um traço discreto: uma tabela cheia de "R$ 0,00" esconde o que importa
 const money = (cents: number) =>
@@ -36,32 +33,7 @@ export function CashFlowReport() {
 
   return (
     <>
-      <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Ano anterior"
-          onClick={() => setYear(year - 1)}
-          className="text-muted-foreground"
-        >
-          <ChevronLeft />
-        </Button>
-        <span className="min-w-16 text-center font-medium text-sm tabular-nums">{year}</span>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Próximo ano"
-          onClick={() => setYear(year + 1)}
-          className="text-muted-foreground"
-        >
-          <ChevronRight />
-        </Button>
-        {year !== thisYear() && (
-          <Button variant="ghost" size="sm" onClick={() => setYear(thisYear())}>
-            Este ano
-          </Button>
-        )}
-      </div>
+      <YearNav year={year} onChange={setYear} />
 
       <StatGrid
         stats={[

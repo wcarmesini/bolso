@@ -1,4 +1,12 @@
-import type { DeleteScope, EditScope, Transaction, TransactionFormValues } from '@bolso/shared'
+import type {
+  AuditEntry,
+  DeleteScope,
+  EditScope,
+  ReportBasis,
+  Transaction,
+  TransactionFormValues,
+  TransactionType,
+} from '@bolso/shared'
 import { api } from '@/lib/api-client'
 
 /**
@@ -19,6 +27,26 @@ export function listTransactions({ month, accountId, view }: TransactionView) {
   return api<Transaction[]>(`/transactions?${params}`)
 }
 
+/**
+ * O recorte por trás de um número do relatório: um intervalo de datas, uma categoria
+ * (as subcategorias vêm junto) e um tipo, no mesmo regime em que a tabela foi lida.
+ */
+export type TransactionSlice = {
+  from: string
+  to: string
+  /** Nulo = a linha "Sem categoria" */
+  categoryId: string | null
+  type: TransactionType
+  basis: ReportBasis
+}
+
+export function listTransactionSlice({ from, to, categoryId, type, basis }: TransactionSlice) {
+  const params = new URLSearchParams({ from, to, type, basis })
+  if (categoryId) params.set('categoryId', categoryId)
+  else params.set('uncategorized', 'true')
+  return api<Transaction[]>(`/transactions?${params}`)
+}
+
 export function createTransaction(values: TransactionFormValues) {
   return api<Transaction>('/transactions', { method: 'POST', body: values })
 }
@@ -30,4 +58,30 @@ export function updateTransaction(id: string, values: TransactionFormValues, sco
 
 export function deleteTransaction(id: string, scope: DeleteScope) {
   return api<void>(`/transactions/${id}?scope=${scope}`, { method: 'DELETE' })
+}
+
+/** Quem criou, quem mudou o quê: o rastro de um lançamento */
+export function getTransactionHistory(id: string) {
+  return api<AuditEntry[]>(`/transactions/${id}/history`)
+}
+
+export type DeletedTransaction = {
+  id: string
+  description: string
+  amountCents: number
+  type: TransactionType
+  purchaseDate: string
+  accountId: string | null
+  categoryIds: (string | null)[]
+  deletedAt: string | null
+  deletedByName: string
+}
+
+/** A lixeira: o que foi excluído e ainda dá para trazer de volta */
+export function listDeletedTransactions() {
+  return api<DeletedTransaction[]>('/transactions/deleted')
+}
+
+export function restoreTransaction(id: string) {
+  return api<void>(`/transactions/${id}/restore`, { method: 'POST' })
 }

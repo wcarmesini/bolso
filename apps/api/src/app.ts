@@ -3,15 +3,20 @@ import { logger } from 'hono/logger'
 import { configuredProviders } from './auth'
 import { type AppEnv, type Deps, HttpError, isUniqueViolation, requireGroup } from './http'
 import { accountsRoutes } from './routes/accounts'
+import { apiKeysRoutes } from './routes/api-keys'
+import { bankRoutes } from './routes/bank'
 import { budgetsRoutes } from './routes/budgets'
 import { categoriesRoutes } from './routes/categories'
+import { contactsRoutes } from './routes/contacts'
 import { devRoutes } from './routes/dev'
 import { groupsRoutes } from './routes/groups'
+import { importsRoutes } from './routes/imports'
 import { integrationKeysRoutes } from './routes/integration-keys'
 import { invitationsRoutes } from './routes/invitations'
 import { meRoutes } from './routes/me'
 import { reportsRoutes } from './routes/reports'
 import { transactionsRoutes } from './routes/transactions'
+import { transfersRoutes } from './routes/transfers'
 
 /**
  * Monta a API (tudo em /api). Recebe as dependências prontas, o que deixa os testes usarem
@@ -40,10 +45,15 @@ export function buildApp(deps: Deps) {
   secured.route('/invitations', invitationsRoutes(deps))
   secured.route('/categories', categoriesRoutes(deps))
   secured.route('/accounts', accountsRoutes(deps))
+  secured.route('/contacts', contactsRoutes(deps))
   secured.route('/integration-keys', integrationKeysRoutes(deps))
+  secured.route('/api-keys', apiKeysRoutes(deps))
+  secured.route('/bank', bankRoutes(deps))
   secured.route('/transactions', transactionsRoutes(deps))
+  secured.route('/transfers', transfersRoutes(deps))
   secured.route('/budgets', budgetsRoutes(deps))
   secured.route('/reports', reportsRoutes(deps))
+  secured.route('/imports', importsRoutes(deps))
   app.route('/api', secured)
 
   app.notFound((c) => c.json({ error: 'Endereço não encontrado.' }, 404))

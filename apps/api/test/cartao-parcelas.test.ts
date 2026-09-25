@@ -5,6 +5,7 @@ import {
   type CashFlowReport,
   type CategoriesReport,
   type Category,
+  type MonthlyReport,
   type PeopleReport,
   prorate,
   splitInstallments,
@@ -380,12 +381,19 @@ describe('relatórios', () => {
 
   it('orçado × realizado: limite e gasto de cada categoria principal', async () => {
     const report = await ana.json<BudgetReport>(`/api/reports/budget?month=${mes}`)
-    const mercado = report.body.lines.find((line) => line.name === 'Mercado')
+    const mercado = report.body.expense.find((line) => line.name === 'Mercado')
     expect(mercado).toMatchObject({ limitCents: 20000, spentCents: 24000 })
-    const lazer = report.body.lines.find((line) => line.name === 'Lazer')
+    const lazer = report.body.expense.find((line) => line.name === 'Lazer')
     expect(lazer).toMatchObject({ limitCents: null, spentCents: 20000 })
     // "Sem categoria" não é categoria: não entra no orçamento
-    expect(report.body.lines.some((line) => line.name === 'Sem categoria')).toBe(false)
+    expect(report.body.expense.some((line) => line.name === 'Sem categoria')).toBe(false)
+    // A principal soma o que foi gasto nas subcategorias
+    const alimentacao = report.body.expense.find((line) => line.name === 'Alimentação fora')
+    expect(alimentacao?.spentCents).toBe(10000)
+    expect(alimentacao?.children.map((child) => child.name).sort()).toEqual([
+      'Delivery',
+      'Restaurante',
+    ])
   })
 
   it('fluxo de caixa: o cartão entra no mês do vencimento, não no da compra', async () => {
@@ -395,6 +403,54 @@ describe('relatórios', () => {
     expect(report.body.months.length).toBe(12)
     expect(abril).toEqual({ month: mes, incomeCents: 500000, expenseCents: 30000 + 4000 + 1500 })
     expect(maio?.expenseCents).toBe(20000)
+  })
+
+  it('mês a mês: cada categoria na linha, os meses nas colunas', async () => {
+    const report = await ana.json<MonthlyReport>(
+      '/api/reports/monthly?start=2028-01&count=12&interval=month',
+    )
+    expect(report.body.periods.length).toBe(12)
+    // Mensal: cada coluna é um mês só
+    expect(report.body.periods[0]).toEqual({ start: '2028-01', end: '2028-01' })
+    const abril = report.body.periods.findIndex((period) => period.start === mes)
+
+    const saidas = new Map(report.body.expense.rows.map((row) => [row.name, row]))
+    expect(saidas.get('Mercado')?.values[abril]).toBe(24000)
+    expect(saidas.get('Mercado')?.totalCents).toBe(24000)
+    // Fora de abril, a linha fica zerada
+    expect(saidas.get('Mercado')?.values.filter((value) => value > 0).length).toBe(1)
+
+    // Subcategorias aparecem dentro da principal
+    expect(saidas.get('Alimentação fora')?.values[abril]).toBe(10000)
+    expect(saidas.get('Alimentação fora')?.children).toEqual([
+      {
+        categoryId: id('Restaurante'),
+        name: 'Restaurante',
+        values: expect.any(Array),
+        totalCents: 6000,
+      },
+      { categoryId: id('Delivery'), name: 'Delivery', values: expect.any(Array), totalCents: 4000 },
+    ])
+
+    // Totais da seção e a compra no cartão contando no mês da compra (competência)
+    expect(report.body.expense.values[abril]).toBe(24000 + 10000 + 1500 + 20000)
+    expect(report.body.income.values[abril]).toBe(500000)
+    expect(report.body.income.rows[0]?.name).toBe('Salário')
+  })
+
+  it('trimestral: cada coluna junta três meses a partir do mês inicial', async () => {
+    const report = await ana.json<MonthlyReport>(
+      '/api/reports/monthly?start=2028-01&count=4&interval=quarter',
+    )
+    expect(report.body.periods).toEqual([
+      { start: '2028-01', end: '2028-03' },
+      { start: '2028-04', end: '2028-06' },
+      { start: '2028-07', end: '2028-09' },
+      { start: '2028-10', end: '2028-12' },
+    ])
+    // Tudo de abril cai no segundo trimestre
+    expect(report.body.expense.values).toEqual([0, 24000 + 10000 + 1500 + 20000, 0, 0])
+    expect(report.body.income.values[1]).toBe(500000)
   })
 
   it('gastos por pessoa: quem lançou, com todo o grupo na lista', async () => {

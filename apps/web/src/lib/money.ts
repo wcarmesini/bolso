@@ -17,3 +17,19 @@ const percent = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFracti
 export function formatShare(part: number, total: number) {
   return percent.format(total > 0 ? part / total : 0)
 }
+
+/** formatPercent(0.42) → "42%" */
+export function formatPercent(ratio: number) {
+  return percent.format(ratio)
+}
+
+const percentComCasa = new Intl.NumberFormat('pt-BR', {
+  style: 'percent',
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+})
+
+/** Para números que ficam lado a lado numa tabela: formatSharePrecise(0.667) → "66,7%" */
+export function formatSharePrecise(ratio: number) {
+  return percentComCasa.format(ratio)
+}

@@ -168,3 +168,34 @@
     cursor: pointer;
   }
 }
+
+/*
+ * Cor de categoria. O fundo do selo é sempre a cor escolhida (--cat), só diluída. O traço é
+ * --cat-claro ou --cat-escuro: a mesma cor com o brilho ajustado até ter contraste suficiente
+ * com esse fundo em cada tema (ver features/categories/colors.ts). Assim um rosa clarinho não
+ * some no tema claro, nem um azul-marinho no escuro, e a cor do selo continua a escolhida.
+ */
+@utility cat-badge {
+  background-color: color-mix(in oklab, var(--cat) 16%, transparent);
+  color: var(--cat-claro);
+}
+
+.dark .cat-badge {
+  color: var(--cat-escuro);
+}
+
+@utility cat-swatch {
+  background-color: var(--cat);
+}
+
+/*
+ * O grupo sob o dedo enquanto se arrasta uma subcategoria. A classe é posta e tirada pelo
+ * próprio arrasto (use-category-drag.ts), para a lista não ser redesenhada a cada movimento.
+ * O z-index é o que faz a borda de baixo aparecer inteira, por cima do grupo seguinte.
+ */
+.grupo-recebendo {
+  position: relative;
+  z-index: 20;
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 60%, transparent);
+}

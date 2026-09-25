@@ -1,21 +1,13 @@
 import {
-  cardCycleOf,
   type EditScope,
-  isTransactionType,
-  MAX_INSTALLMENTS,
-  splitInstallments,
-  statementFor,
   type Transaction,
   type TransactionFormValues,
   transactionFormSchema,
-  transactionTypeLabels,
-  transactionTypes,
 } from '@bolso/shared'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect, useMemo, useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { useCallback, useEffect, useState } from 'react'
+import { type Resolver, useForm, useFormState } from 'react-hook-form'
 import { toast } from 'sonner'
-import { MoneyInput } from '@/components/money-input'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -26,32 +18,32 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Field, FieldDescription, FieldGroup } from '@/components/ui/field'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { useAccounts } from '@/features/accounts/queries'
-import { useCategories } from '@/features/categories/queries'
-import { monthLabel, shortDate, today } from '@/lib/dates'
+import { today } from '@/lib/dates'
 import { errorMessage, FieldValidationError } from '@/lib/errors'
-import { formatCents } from '@/lib/money'
-import { categoryOptions } from '../category-options'
 import { useSaveTransaction } from '../queries'
 import { SplitsField } from './splits-field'
+import {
+  AccountField,
+  AmountField,
+  CashFields,
+  ContactField,
+  DescriptionField,
+  PurchaseDateField,
+  TypeField,
+} from './transaction-form-fields'
+import { TransactionHistory } from './transaction-history'
 
-const NONE = 'none'
-
-const emptyValues = (accountId: string | null): TransactionFormValues => ({
-  type: 'expense',
+const emptyValues = (
+  accountId: string | null,
+  type: TransactionFormValues['type'] = 'expense',
+): TransactionFormValues => ({
+  type,
   amountCents: 0,
   description: '',
   accountId,
+  contactId: null,
   purchaseDate: today(),
   paymentDate: today(),
   splits: [{ categoryId: null, amountCents: 0 }],
@@ -63,80 +55,112 @@ const scopeItems: { value: EditScope; label: string }[] = [
   { value: 'all', label: 'Todas as parcelas' },
 ]
 
+/*
+ * Com uma categoria só, ela vale o lançamento inteiro. Em vez de gravar isso a cada tecla
+ * digitada (uma re-renderização por dígito), o ajuste acontece aqui, uma vez, na validação.
+ */
+const base = zodResolver(transactionFormSchema)
+const resolver: Resolver<TransactionFormValues> = (values, context, options) =>
+  base(
+    values.splits?.length === 1
+      ? { ...values, splits: [{ ...values.splits[0], amountCents: values.amountCents }] }
+      : values,
+    context,
+    options,
+  )
+
 type TransactionFormDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Ausente = novo lançamento */
   transaction?: Transaction | null
+  /** Lançamento copiado: abre como novo, já preenchido (menos a parcela e o extrato) */
+  cloneOf?: Transaction | null
   /** Mês que está sendo visto, para o novo lançamento já cair nele */
   month: string
   /** Conta que a lista está filtrando: o lançamento novo já vem nela */
   defaultAccountId?: string | null
+  /** Quem abriu já escolheu se é entrada ou saída (o menu do botão "Novo lançamento") */
+  defaultType?: TransactionFormValues['type']
+  /*
+   * Abre já preenchido com o que se sabe (ex.: a linha do extrato que está sendo conferida).
+   * Diferente de `cloneOf`, que copia um lançamento inteiro que já existe.
+   */
+  initialValues?: Partial<TransactionFormValues> | null
+  /** Avisa quem abriu qual lançamento nasceu, para ele seguir o fluxo dele */
+  onSaved?: (transaction: Transaction) => void
+  /** Abre por cima de outro diálogo (ex.: a lista de um relatório) */
+  stacked?: boolean
 }
 
+/**
+ * Formulário de lançamento.
+ *
+ * Este componente é só a moldura: o diálogo, a ordem dos campos e o salvar. Cada campo é um
+ * componente próprio (transaction-form-fields.tsx) ligado apenas ao seu valor, para digitar
+ * não custar uma re-renderização do formulário inteiro.
+ */
 export function TransactionFormDialog({
   open,
   onOpenChange,
   transaction,
+  cloneOf,
   month,
   defaultAccountId = null,
+  defaultType = 'expense',
+  initialValues = null,
+  onSaved,
+  stacked = false,
 }: TransactionFormDialogProps) {
   const saveTransaction = useSaveTransaction()
-  const { data: categories = [] } = useCategories()
-  const { data: accounts = [] } = useAccounts()
   const [scope, setScope] = useState<EditScope>('one')
 
-  const form = useForm<TransactionFormValues>({
-    resolver: zodResolver(transactionFormSchema),
-    defaultValues: emptyValues(null),
-  })
+  const form = useForm<TransactionFormValues>({ resolver, defaultValues: emptyValues(null) })
+  const { control, reset, getValues, setValue, setError, handleSubmit } = form
 
-  // Cada abertura começa do zero (novo) ou com os dados do lançamento (edição)
+  // Cada abertura começa do zero (novo) ou com os dados do lançamento (edição/cópia)
   useEffect(() => {
     if (!open) return
     setScope('one')
-    if (transaction) {
-      form.reset({
-        type: transaction.type,
-        amountCents: transaction.amountCents,
-        description: transaction.description,
-        accountId: transaction.accountId,
-        purchaseDate: transaction.purchaseDate,
-        paymentDate: transaction.paymentDate,
-        splits: transaction.splits.length
-          ? transaction.splits
-          : [{ categoryId: null, amountCents: transaction.amountCents }],
+    const modelo = transaction ?? cloneOf
+    if (modelo) {
+      reset({
+        type: modelo.type,
+        amountCents: modelo.amountCents,
+        description: modelo.description,
+        accountId: modelo.accountId,
+        contactId: modelo.contactId,
+        // A cópia nasce hoje; a edição mantém as datas do lançamento
+        purchaseDate: transaction ? modelo.purchaseDate : today(),
+        paymentDate: transaction ? modelo.paymentDate : modelo.paymentDate ? today() : null,
+        splits: modelo.splits.length
+          ? modelo.splits
+          : [{ categoryId: null, amountCents: modelo.amountCents }],
         installments: 1,
       })
       return
     }
-    const values = emptyValues(defaultAccountId)
+    const values = emptyValues(defaultAccountId, defaultType)
     // Olhando outro mês, o lançamento novo nasce lá, e não na data de hoje
     if (!values.purchaseDate.startsWith(month)) {
       values.purchaseDate = `${month}-01`
       values.paymentDate = `${month}-01`
     }
-    form.reset(values)
-  }, [open, transaction, month, defaultAccountId, form])
+    reset(initialValues ? { ...values, ...initialValues } : values)
+  }, [open, transaction, cloneOf, month, defaultAccountId, defaultType, initialValues, reset])
 
-  const [type, accountId, purchaseDate, amount, installments = 1] = form.watch([
-    'type',
-    'accountId',
-    'purchaseDate',
-    'amountCents',
-    'installments',
-  ])
-  const options = useMemo(() => categoryOptions(categories, type), [categories, type])
-  const accountItems = accounts.map((account) => ({ value: account.id, label: account.name }))
-  const account = accounts.find((item) => item.id === accountId)
-  const cycle = account ? cardCycleOf(account) : null
-  const statement =
-    cycle && /^\d{4}-\d{2}-\d{2}$/.test(purchaseDate) ? statementFor(purchaseDate, cycle) : null
-  const series = transaction?.installment ?? null
+  // As categorias escolhidas eram do outro tipo: a API recusaria
+  const limparCategorias = useCallback(() => {
+    setValue(
+      'splits',
+      getValues('splits').map((split) => ({ ...split, categoryId: null })),
+    )
+  }, [getValues, setValue])
 
-  const submit = form.handleSubmit(async (values) => {
+  const submit = handleSubmit(async (values) => {
     try {
-      await saveTransaction.mutateAsync({ id: transaction?.id, values, scope })
+      const salvo = await saveTransaction.mutateAsync({ id: transaction?.id, values, scope })
+      onSaved?.(salvo)
       onOpenChange(false)
       toast.success(
         transaction
@@ -147,21 +171,27 @@ export function TransactionFormDialog({
       )
     } catch (cause) {
       if (cause instanceof FieldValidationError) {
-        form.setError(cause.field as keyof TransactionFormValues, { message: cause.message })
+        setError(cause.field as keyof TransactionFormValues, { message: cause.message })
       } else {
         toast.error(errorMessage(cause, 'Não foi possível salvar.'))
       }
     }
   })
 
-  const perInstallment = splitInstallments(amount || 0, Math.max(1, installments))
+  const series = transaction?.installment ?? null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md">
-        <form onSubmit={submit} className="flex flex-col gap-6">
+      <DialogContent stacked={stacked} className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
+        <form onSubmit={submit} className="flex flex-col gap-5">
           <DialogHeader>
-            <DialogTitle>{transaction ? 'Editar lançamento' : 'Novo lançamento'}</DialogTitle>
+            <DialogTitle>
+              {transaction
+                ? 'Editar lançamento'
+                : cloneOf
+                  ? 'Copiar lançamento'
+                  : 'Novo lançamento'}
+            </DialogTitle>
             {series && (
               <DialogDescription>
                 Parcela {series.number} de {series.count}
@@ -169,7 +199,7 @@ export function TransactionFormDialog({
             )}
           </DialogHeader>
 
-          <FieldGroup>
+          <FieldGroup className="gap-4">
             {series && (
               <Field>
                 <ToggleGroup
@@ -189,198 +219,52 @@ export function TransactionFormDialog({
                 </ToggleGroup>
                 {scope === 'all' && (
                   <FieldDescription>
-                    Descrição, conta e categorias mudam em todas as parcelas. Valor e datas mudam só
-                    nesta.
+                    Descrição, conta e categorias mudam em todas. Valor e datas, só nesta.
                   </FieldDescription>
                 )}
               </Field>
             )}
 
-            <Field>
-              <FieldLabel>Tipo</FieldLabel>
-              <Controller
-                control={form.control}
-                name="type"
-                render={({ field }) => (
-                  <ToggleGroup
-                    variant="outline"
-                    spacing={0}
-                    value={[field.value]}
-                    onValueChange={(next) => {
-                      // Clicar no item já ativo desmarcaria tudo: mantém o atual
-                      if (!isTransactionType(next[0])) return
-                      field.onChange(next[0])
-                      // As categorias escolhidas eram do outro tipo: a API recusaria
-                      form.setValue(
-                        'splits',
-                        form.getValues('splits').map((split) => ({ ...split, categoryId: null })),
-                      )
-                    }}
-                    className="w-full"
-                  >
-                    {transactionTypes.map((value) => (
-                      <ToggleGroupItem key={value} value={value} className="flex-1">
-                        {transactionTypeLabels[value]}
-                      </ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
-                )}
-              />
-            </Field>
+            <TypeField control={control} onTypeChange={limparCategorias} />
 
-            <Field data-invalid={Boolean(form.formState.errors.amountCents)}>
-              <FieldLabel htmlFor="transaction-amount">
-                {installments > 1 ? 'Valor total' : 'Valor'}
-              </FieldLabel>
-              <Controller
-                control={form.control}
-                name="amountCents"
-                render={({ field }) => (
-                  <MoneyInput
-                    id="transaction-amount"
-                    autoFocus
-                    value={field.value}
-                    onValueChange={(cents) => {
-                      field.onChange(cents)
-                      // Com uma categoria só, ela acompanha o valor inteiro
-                      if (form.getValues('splits').length === 1) {
-                        form.setValue('splits.0.amountCents', cents)
-                      }
-                    }}
-                    aria-invalid={Boolean(form.formState.errors.amountCents)}
-                    className="text-lg"
-                  />
-                )}
-              />
-              <FieldError errors={[form.formState.errors.amountCents]} />
-            </Field>
-
-            <Field data-invalid={Boolean(form.formState.errors.description)}>
-              <FieldLabel htmlFor="transaction-description">Descrição</FieldLabel>
-              <Input
-                id="transaction-description"
-                placeholder="Ex.: Feira da semana"
-                autoComplete="off"
-                aria-invalid={Boolean(form.formState.errors.description)}
-                {...form.register('description')}
-              />
-              <FieldError errors={[form.formState.errors.description]} />
-            </Field>
-
-            <SplitsField form={form} options={options} />
-
-            <Field data-invalid={Boolean(form.formState.errors.accountId)}>
-              <FieldLabel htmlFor="transaction-account">Conta</FieldLabel>
-              <Controller
-                control={form.control}
-                name="accountId"
-                render={({ field }) => (
-                  <Select
-                    items={[{ value: NONE, label: 'Sem conta' }, ...accountItems]}
-                    value={field.value ?? NONE}
-                    onValueChange={(next) => field.onChange(next === NONE ? null : next)}
-                  >
-                    <SelectTrigger id="transaction-account" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE}>Sem conta</SelectItem>
-                      {accountItems.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-              <FieldError errors={[form.formState.errors.accountId]} />
-            </Field>
-
-            {!transaction && (
-              <Field data-invalid={Boolean(form.formState.errors.installments)}>
-                <FieldLabel htmlFor="transaction-installments">Parcelas</FieldLabel>
-                <Controller
-                  control={form.control}
-                  name="installments"
-                  render={({ field }) => (
-                    <Input
-                      id="transaction-installments"
-                      type="number"
-                      inputMode="numeric"
-                      min={1}
-                      max={MAX_INSTALLMENTS}
-                      value={field.value ?? 1}
-                      onChange={(event) => field.onChange(Number(event.target.value) || 1)}
-                      aria-invalid={Boolean(form.formState.errors.installments)}
-                      className="w-24"
-                    />
-                  )}
-                />
-                <FieldDescription>
-                  {installments > 1
-                    ? `${installments}x de ${formatCents(perInstallment[0] ?? 0)}, uma por mês${
-                        perInstallment[0] !== perInstallment.at(-1)
-                          ? ' (os centavos que sobram vão na 1ª)'
-                          : ''
-                      }.`
-                    : 'À vista. Para parcelar, informe em quantas vezes.'}
-                </FieldDescription>
-                <FieldError errors={[form.formState.errors.installments]} />
-              </Field>
-            )}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field data-invalid={Boolean(form.formState.errors.purchaseDate)}>
-                <FieldLabel htmlFor="transaction-date">Data da compra</FieldLabel>
-                <Input
-                  id="transaction-date"
-                  type="date"
-                  aria-invalid={Boolean(form.formState.errors.purchaseDate)}
-                  {...form.register('purchaseDate')}
-                />
-                <FieldError errors={[form.formState.errors.purchaseDate]} />
-              </Field>
-
-              {!cycle && (
-                <Field data-invalid={Boolean(form.formState.errors.paymentDate)}>
-                  <FieldLabel htmlFor="transaction-payment-date">Pago em</FieldLabel>
-                  <Controller
-                    control={form.control}
-                    name="paymentDate"
-                    render={({ field }) => (
-                      <Input
-                        id="transaction-payment-date"
-                        type="date"
-                        value={field.value ?? ''}
-                        onChange={(event) => field.onChange(event.target.value || null)}
-                        aria-invalid={Boolean(form.formState.errors.paymentDate)}
-                      />
-                    )}
-                  />
-                  <FieldError errors={[form.formState.errors.paymentDate]} />
-                </Field>
-              )}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <AmountField control={control} />
+              <PurchaseDateField control={control} />
             </div>
-            <FieldDescription>
-              {statement
-                ? `${installments > 1 && !transaction ? 'A 1ª parcela cai' : 'Cai'} na fatura de ${monthLabel(
-                    statement.month,
-                  )}, que vence em ${shortDate(statement.dueDate)}. O orçamento conta pela data da compra.`
-                : installments > 1 && !transaction
-                  ? 'A data da compra decide o mês do orçamento de cada parcela. As próximas parcelas ficam "a pagar".'
-                  : 'A data da compra decide o mês do orçamento. Deixe "Pago em" vazio enquanto não tiver saído da conta.'}
-            </FieldDescription>
+
+            <DescriptionField control={control} />
+
+            <SplitsField form={form} />
+
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <AccountField control={control} />
+              <ContactField control={control} />
+            </div>
+
+            <CashFields control={control} editando={Boolean(transaction)} setValue={setValue} />
           </FieldGroup>
+
+          {/* Só na edição: um lançamento que acabou de nascer não tem história para contar */}
+          {transaction && <TransactionHistory transactionId={transaction.id} />}
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? 'Salvando…' : 'Salvar'}
-            </Button>
+            <SubmitButton control={control} />
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   )
 }
+
+/** Separado para o "Salvando…" não fazer o formulário inteiro re-renderizar */
+function SubmitButton({ control }: { control: TransactionFormDialogControl }) {
+  const { isSubmitting } = useFormState({ control })
+  return (
+    <Button type="submit" disabled={isSubmitting}>
+      {isSubmitting ? 'Salvando…' : 'Salvar'}
+    </Button>
+  )
+}
+
+type TransactionFormDialogControl = ReturnType<typeof useForm<TransactionFormValues>>['control']

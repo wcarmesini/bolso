@@ -45,6 +45,11 @@ export function monthLabel(month: string) {
   return monthFormat.format(parseISODate(`${month}-01`))
 }
 
+/** "2026-10" → "out" */
+export function monthShortName(month: string) {
+  return shortMonthFormat.format(parseISODate(`${month}-01`)).replace('.', '')
+}
+
 /** "2026-10" → "out/26", para caber numa linha da lista */
 export function shortMonthLabel(month: string) {
   const name = shortMonthFormat.format(parseISODate(`${month}-01`)).replace('.', '')
@@ -54,6 +59,21 @@ export function shortMonthLabel(month: string) {
 /** "2026-10-05" → "05/10" */
 export function shortDate(isoDate: string) {
   return shortDateFormat.format(parseISODate(isoDate))
+}
+
+const fullDateFormat = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+})
+
+/** "hoje", "ontem" ou "23/09/2026" — curto o bastante para caber num campo */
+export function dateLabel(isoDate: string) {
+  const diff = daysFromToday(isoDate)
+  if (diff === 0) return 'hoje'
+  if (diff === -1) return 'ontem'
+  if (diff === 1) return 'amanhã'
+  return fullDateFormat.format(parseISODate(isoDate))
 }
 
 /** "hoje", "ontem" ou "sáb., 20 de set." — o cabeçalho de cada dia na lista */

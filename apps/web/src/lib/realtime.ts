@@ -6,7 +6,11 @@ import type { QueryClient } from '@tanstack/react-query'
 const queryKeysByResource: Record<RealtimeResource, string[][]> = {
   categories: [['categories'], ['reports']],
   accounts: [['accounts'], ['transactions']],
-  'integration-keys': [['integration-keys']],
+  'integration-keys': [['integration-keys'], ['bank']],
+  'api-keys': [['api-keys']],
+  bank: [['bank']],
+  imports: [['imports']],
+  contacts: [['contacts'], ['transactions']],
   transactions: [['transactions'], ['reports']],
   budgets: [['budgets'], ['reports']],
   group: [['me'], ['group-members'], ['group-invitations'], ['reports']],

@@ -14,6 +14,7 @@ const toIntegrationKey = (row: Row): IntegrationKey => ({
   provider: row.provider,
   customProvider: row.customProvider,
   label: row.label,
+  clientId: row.clientId,
   secretLast4: row.secretLast4,
   createdAt: row.createdAt.toISOString(),
 })
@@ -40,6 +41,7 @@ export function integrationKeysRoutes(deps: Deps) {
           provider: values.provider,
           customProvider: values.provider === 'other' ? values.customProvider : '',
           label: values.label,
+          clientId: values.clientId,
           secretCiphertext: encryptSecret(values.secret, env.ENCRYPTION_KEY),
           secretLast4: values.secret.slice(-4),
           createdBy: c.var.user.id,

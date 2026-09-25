@@ -4,8 +4,9 @@ import {
   type CategoryKind,
   categoryFormSchema,
   categoryKindLabels,
-  categoryKinds,
+  categoryKindsInOrder,
   categoryStyle,
+  DEFAULT_CATEGORY_COLOR,
   isCategoryKind,
 } from '@bolso/shared'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -58,11 +59,11 @@ export function CategoryFormDialog({
     form.reset(
       category
         ? { name: category.name, kind: category.kind, ...categoryStyle(category) }
-        : { name: '', kind: defaultKind, icon: 'tag', color: 'slate' },
+        : { name: '', kind: defaultKind, icon: 'tag', color: DEFAULT_CATEGORY_COLOR },
     )
   }, [open, category, defaultKind, form])
 
-  const [icon, color] = form.watch(['icon', 'color'])
+  const [icon, color, nome] = form.watch(['icon', 'color', 'name'])
 
   const submit = form.handleSubmit(async (values) => {
     try {
@@ -80,8 +81,8 @@ export function CategoryFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <form onSubmit={submit} className="flex flex-col gap-6">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
+        <form onSubmit={submit} className="flex flex-col gap-5">
           <DialogHeader>
             <DialogTitle>{category ? 'Editar categoria' : 'Nova categoria'}</DialogTitle>
             <DialogDescription>Escolha um nome, um ícone e uma cor.</DialogDescription>
@@ -119,7 +120,7 @@ export function CategoryFormDialog({
                     }}
                     className="w-full"
                   >
-                    {categoryKinds.map((kind) => (
+                    {categoryKindsInOrder.map((kind) => (
                       <ToggleGroupItem key={kind} value={kind} className="flex-1">
                         {categoryKindLabels[kind]}
                       </ToggleGroupItem>
@@ -135,7 +136,12 @@ export function CategoryFormDialog({
                 control={form.control}
                 name="icon"
                 render={({ field }) => (
-                  <IconPicker value={field.value} color={color} onChange={field.onChange} />
+                  <IconPicker
+                    value={field.value}
+                    color={color}
+                    onChange={field.onChange}
+                    name={nome}
+                  />
                 )}
               />
             </Field>

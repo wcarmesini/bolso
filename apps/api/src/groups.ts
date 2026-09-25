@@ -7,19 +7,28 @@ import { categories, member, organization } from './db/schema'
 // Grupo = organização do Better Auth. Toda pessoa começa com o próprio grupo.
 
 export async function seedDefaultCategories(db: Database, groupId: string) {
+  // A ordem em que são criadas já é a ordem da tela; arrastar muda daí em diante
+  const posicao = { expense: 0, income: 0 }
   for (const { subcategories = [], ...values } of defaultCategories) {
+    posicao[values.kind] += 1
     const [parent] = await db
       .insert(categories)
-      .values({ ...values, groupId, nameKey: nameKey(values.name) })
+      .values({
+        ...values,
+        groupId,
+        nameKey: nameKey(values.name),
+        position: posicao[values.kind],
+      })
       .returning({ id: categories.id })
     if (!parent || subcategories.length === 0) continue
     await db.insert(categories).values(
-      subcategories.map((name) => ({
+      subcategories.map((name, index) => ({
         groupId,
         parentId: parent.id,
         kind: values.kind,
         name,
         nameKey: nameKey(name),
+        position: index + 1,
       })),
     )
   }

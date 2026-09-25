@@ -20,7 +20,10 @@ type ConfirmDeleteDialogProps = {
   confirmLabel?: string
   /** Aviso mostrado depois de excluir (ex.: "Categoria excluída") */
   successMessage: string
-  onConfirm: () => Promise<void>
+  /** Aviso quando dá errado e o servidor não explicou */
+  failMessage?: string
+  /** Devolver um texto troca o aviso de sucesso por ele (ex.: o resumo do que foi desfeito) */
+  onConfirm: () => Promise<undefined | string>
 }
 
 export function ConfirmDeleteDialog({
@@ -30,6 +33,7 @@ export function ConfirmDeleteDialog({
   description,
   confirmLabel = 'Excluir',
   successMessage,
+  failMessage = 'Não foi possível excluir.',
   onConfirm,
 }: ConfirmDeleteDialogProps) {
   const [busy, setBusy] = useState(false)
@@ -37,12 +41,12 @@ export function ConfirmDeleteDialog({
   const confirm = async () => {
     setBusy(true)
     try {
-      await onConfirm()
+      const resumo = await onConfirm()
       onOpenChange(false)
-      toast.success(successMessage)
+      toast.success(resumo || successMessage)
     } catch (cause) {
       // O diálogo fica aberto para tentar de novo; o motivo aparece no aviso flutuante
-      toast.error(errorMessage(cause, 'Não foi possível excluir.'))
+      toast.error(errorMessage(cause, failMessage))
     } finally {
       setBusy(false)
     }

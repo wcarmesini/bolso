@@ -10,9 +10,26 @@ const apiProxy = {
   '/api': { target: 'http://localhost:3000', ws: true },
 }
 
+/*
+ * Abrindo o app pelo celular por um túnel (ngrok), o endereço deixa de ser localhost.
+ * Basta rodar com BOLSO_TUNNEL_HOST=seu-dominio.ngrok-free.app: o Vite passa a aceitar esse
+ * endereço e o recarregamento automático se liga pela porta 443 (o túnel é HTTPS).
+ */
+const tunnelHost = process.env.BOLSO_TUNNEL_HOST
+
+// Portas fixas: se a porta estiver ocupada (outro `pnpm dev` aberto), o Vite para com erro em vez
+// de pular para a seguinte em silêncio. Numa porta diferente o app até abre, mas a API não confia
+// nesse endereço (PUBLIC_URL / TRUSTED_ORIGINS) e recusa login e logout.
 export default defineConfig({
-  server: { proxy: apiProxy },
-  preview: { proxy: apiProxy },
+  server: {
+    port: 5173,
+    strictPort: true,
+    proxy: apiProxy,
+    ...(tunnelHost
+      ? { host: true, allowedHosts: [tunnelHost], hmr: { clientPort: 443, host: tunnelHost } }
+      : {}),
+  },
+  preview: { port: 4173, strictPort: true, proxy: apiProxy },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

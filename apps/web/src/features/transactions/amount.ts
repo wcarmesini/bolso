@@ -15,11 +15,17 @@ export function formatSignedCents(type: TransactionType, cents: number) {
   return `${type === 'income' ? '+' : '−'}${formatCents(cents)}`
 }
 
-/** Entradas, saídas e o que sobra no mês */
+/**
+ * Entradas, saídas e o que sobra no mês.
+ *
+ * Transferência entre contas fica de fora: o dinheiro só mudou de lugar, e contá-la
+ * dobraria o mês (uma saída e uma entrada do mesmo valor, no mesmo dia).
+ */
 export function summarize(transactions: Transaction[]) {
   let income = 0
   let expense = 0
   for (const transaction of transactions) {
+    if (transaction.transfer) continue
     if (transaction.type === 'income') income += transaction.amountCents
     else expense += transaction.amountCents
   }

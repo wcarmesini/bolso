@@ -13,6 +13,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppAjustesRouteImport } from './routes/_app.ajustes'
+import { Route as AppImportarRouteImport } from './routes/_app.importar'
 import { Route as AppLancamentosRouteImport } from './routes/_app.lancamentos'
 import { Route as AppOrcamentoRouteImport } from './routes/_app.orcamento'
 import { Route as AppAjustesIndexRouteImport } from './routes/_app.ajustes.index'
@@ -20,7 +21,9 @@ import { Route as AppAjustesAplicativoRouteImport } from './routes/_app.ajustes.
 import { Route as AppAjustesCategoriasRouteImport } from './routes/_app.ajustes.categorias'
 import { Route as AppAjustesChavesApiRouteImport } from './routes/_app.ajustes.chaves-api'
 import { Route as AppAjustesContasRouteImport } from './routes/_app.ajustes.contas'
+import { Route as AppAjustesContatosRouteImport } from './routes/_app.ajustes.contatos'
 import { Route as AppAjustesGrupoRouteImport } from './routes/_app.ajustes.grupo'
+import { Route as AppAjustesIntegracoesRouteImport } from './routes/_app.ajustes.integracoes'
 import { Route as AppAjustesPerfilRouteImport } from './routes/_app.ajustes.perfil'
 import { Route as AppConviteIdRouteImport } from './routes/_app.convite.$id'
 import { Route as AppRelatoriosIndexRouteImport } from './routes/_app.relatorios.index'
@@ -43,6 +46,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppAjustesRoute = AppAjustesRouteImport.update({
   id: '/ajustes',
   path: '/ajustes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppImportarRoute = AppImportarRouteImport.update({
+  id: '/importar',
+  path: '/importar',
   getParentRoute: () => AppRoute,
 } as any)
 const AppLancamentosRoute = AppLancamentosRouteImport.update({
@@ -80,9 +88,19 @@ const AppAjustesContasRoute = AppAjustesContasRouteImport.update({
   path: '/contas',
   getParentRoute: () => AppAjustesRoute,
 } as any)
+const AppAjustesContatosRoute = AppAjustesContatosRouteImport.update({
+  id: '/contatos',
+  path: '/contatos',
+  getParentRoute: () => AppAjustesRoute,
+} as any)
 const AppAjustesGrupoRoute = AppAjustesGrupoRouteImport.update({
   id: '/grupo',
   path: '/grupo',
+  getParentRoute: () => AppAjustesRoute,
+} as any)
+const AppAjustesIntegracoesRoute = AppAjustesIntegracoesRouteImport.update({
+  id: '/integracoes',
+  path: '/integracoes',
   getParentRoute: () => AppAjustesRoute,
 } as any)
 const AppAjustesPerfilRoute = AppAjustesPerfilRouteImport.update({
@@ -110,13 +128,16 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/entrar': typeof EntrarRoute
   '/ajustes': typeof AppAjustesRouteWithChildren
+  '/importar': typeof AppImportarRoute
   '/lancamentos': typeof AppLancamentosRoute
   '/orcamento': typeof AppOrcamentoRoute
   '/ajustes/aplicativo': typeof AppAjustesAplicativoRoute
   '/ajustes/categorias': typeof AppAjustesCategoriasRoute
   '/ajustes/chaves-api': typeof AppAjustesChavesApiRoute
   '/ajustes/contas': typeof AppAjustesContasRoute
+  '/ajustes/contatos': typeof AppAjustesContatosRoute
   '/ajustes/grupo': typeof AppAjustesGrupoRoute
+  '/ajustes/integracoes': typeof AppAjustesIntegracoesRoute
   '/ajustes/perfil': typeof AppAjustesPerfilRoute
   '/convite/$id': typeof AppConviteIdRoute
   '/relatorios/$slug': typeof AppRelatoriosSlugRoute
@@ -125,6 +146,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/entrar': typeof EntrarRoute
+  '/importar': typeof AppImportarRoute
   '/lancamentos': typeof AppLancamentosRoute
   '/orcamento': typeof AppOrcamentoRoute
   '/': typeof AppIndexRoute
@@ -132,7 +154,9 @@ export interface FileRoutesByTo {
   '/ajustes/categorias': typeof AppAjustesCategoriasRoute
   '/ajustes/chaves-api': typeof AppAjustesChavesApiRoute
   '/ajustes/contas': typeof AppAjustesContasRoute
+  '/ajustes/contatos': typeof AppAjustesContatosRoute
   '/ajustes/grupo': typeof AppAjustesGrupoRoute
+  '/ajustes/integracoes': typeof AppAjustesIntegracoesRoute
   '/ajustes/perfil': typeof AppAjustesPerfilRoute
   '/convite/$id': typeof AppConviteIdRoute
   '/relatorios/$slug': typeof AppRelatoriosSlugRoute
@@ -144,6 +168,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/entrar': typeof EntrarRoute
   '/_app/ajustes': typeof AppAjustesRouteWithChildren
+  '/_app/importar': typeof AppImportarRoute
   '/_app/lancamentos': typeof AppLancamentosRoute
   '/_app/orcamento': typeof AppOrcamentoRoute
   '/_app/': typeof AppIndexRoute
@@ -151,7 +176,9 @@ export interface FileRoutesById {
   '/_app/ajustes/categorias': typeof AppAjustesCategoriasRoute
   '/_app/ajustes/chaves-api': typeof AppAjustesChavesApiRoute
   '/_app/ajustes/contas': typeof AppAjustesContasRoute
+  '/_app/ajustes/contatos': typeof AppAjustesContatosRoute
   '/_app/ajustes/grupo': typeof AppAjustesGrupoRoute
+  '/_app/ajustes/integracoes': typeof AppAjustesIntegracoesRoute
   '/_app/ajustes/perfil': typeof AppAjustesPerfilRoute
   '/_app/convite/$id': typeof AppConviteIdRoute
   '/_app/relatorios/$slug': typeof AppRelatoriosSlugRoute
@@ -164,13 +191,16 @@ export interface FileRouteTypes {
     | '/'
     | '/entrar'
     | '/ajustes'
+    | '/importar'
     | '/lancamentos'
     | '/orcamento'
     | '/ajustes/aplicativo'
     | '/ajustes/categorias'
     | '/ajustes/chaves-api'
     | '/ajustes/contas'
+    | '/ajustes/contatos'
     | '/ajustes/grupo'
+    | '/ajustes/integracoes'
     | '/ajustes/perfil'
     | '/convite/$id'
     | '/relatorios/$slug'
@@ -179,6 +209,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/entrar'
+    | '/importar'
     | '/lancamentos'
     | '/orcamento'
     | '/'
@@ -186,7 +217,9 @@ export interface FileRouteTypes {
     | '/ajustes/categorias'
     | '/ajustes/chaves-api'
     | '/ajustes/contas'
+    | '/ajustes/contatos'
     | '/ajustes/grupo'
+    | '/ajustes/integracoes'
     | '/ajustes/perfil'
     | '/convite/$id'
     | '/relatorios/$slug'
@@ -197,6 +230,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/entrar'
     | '/_app/ajustes'
+    | '/_app/importar'
     | '/_app/lancamentos'
     | '/_app/orcamento'
     | '/_app/'
@@ -204,7 +238,9 @@ export interface FileRouteTypes {
     | '/_app/ajustes/categorias'
     | '/_app/ajustes/chaves-api'
     | '/_app/ajustes/contas'
+    | '/_app/ajustes/contatos'
     | '/_app/ajustes/grupo'
+    | '/_app/ajustes/integracoes'
     | '/_app/ajustes/perfil'
     | '/_app/convite/$id'
     | '/_app/relatorios/$slug'
@@ -245,6 +281,13 @@ declare module '@tanstack/react-router' {
       path: '/ajustes'
       fullPath: '/ajustes'
       preLoaderRoute: typeof AppAjustesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/importar': {
+      id: '/_app/importar'
+      path: '/importar'
+      fullPath: '/importar'
+      preLoaderRoute: typeof AppImportarRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/lancamentos': {
@@ -296,11 +339,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAjustesContasRouteImport
       parentRoute: typeof AppAjustesRoute
     }
+    '/_app/ajustes/contatos': {
+      id: '/_app/ajustes/contatos'
+      path: '/contatos'
+      fullPath: '/ajustes/contatos'
+      preLoaderRoute: typeof AppAjustesContatosRouteImport
+      parentRoute: typeof AppAjustesRoute
+    }
     '/_app/ajustes/grupo': {
       id: '/_app/ajustes/grupo'
       path: '/grupo'
       fullPath: '/ajustes/grupo'
       preLoaderRoute: typeof AppAjustesGrupoRouteImport
+      parentRoute: typeof AppAjustesRoute
+    }
+    '/_app/ajustes/integracoes': {
+      id: '/_app/ajustes/integracoes'
+      path: '/integracoes'
+      fullPath: '/ajustes/integracoes'
+      preLoaderRoute: typeof AppAjustesIntegracoesRouteImport
       parentRoute: typeof AppAjustesRoute
     }
     '/_app/ajustes/perfil': {
@@ -339,7 +396,9 @@ interface AppAjustesRouteChildren {
   AppAjustesCategoriasRoute: typeof AppAjustesCategoriasRoute
   AppAjustesChavesApiRoute: typeof AppAjustesChavesApiRoute
   AppAjustesContasRoute: typeof AppAjustesContasRoute
+  AppAjustesContatosRoute: typeof AppAjustesContatosRoute
   AppAjustesGrupoRoute: typeof AppAjustesGrupoRoute
+  AppAjustesIntegracoesRoute: typeof AppAjustesIntegracoesRoute
   AppAjustesPerfilRoute: typeof AppAjustesPerfilRoute
   AppAjustesIndexRoute: typeof AppAjustesIndexRoute
 }
@@ -349,7 +408,9 @@ const AppAjustesRouteChildren: AppAjustesRouteChildren = {
   AppAjustesCategoriasRoute: AppAjustesCategoriasRoute,
   AppAjustesChavesApiRoute: AppAjustesChavesApiRoute,
   AppAjustesContasRoute: AppAjustesContasRoute,
+  AppAjustesContatosRoute: AppAjustesContatosRoute,
   AppAjustesGrupoRoute: AppAjustesGrupoRoute,
+  AppAjustesIntegracoesRoute: AppAjustesIntegracoesRoute,
   AppAjustesPerfilRoute: AppAjustesPerfilRoute,
   AppAjustesIndexRoute: AppAjustesIndexRoute,
 }
@@ -360,6 +421,7 @@ const AppAjustesRouteWithChildren = AppAjustesRoute._addFileChildren(
 
 interface AppRouteChildren {
   AppAjustesRoute: typeof AppAjustesRouteWithChildren
+  AppImportarRoute: typeof AppImportarRoute
   AppLancamentosRoute: typeof AppLancamentosRoute
   AppOrcamentoRoute: typeof AppOrcamentoRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -370,6 +432,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAjustesRoute: AppAjustesRouteWithChildren,
+  AppImportarRoute: AppImportarRoute,
   AppLancamentosRoute: AppLancamentosRoute,
   AppOrcamentoRoute: AppOrcamentoRoute,
   AppIndexRoute: AppIndexRoute,

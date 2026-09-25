@@ -27,6 +27,11 @@ export async function signInWithProvider(provider: AuthProviderId, continueTo: s
     : new Error(error.message ?? 'Não foi possível entrar.')
 }
 
-export function signOut() {
-  return authClient.signOut()
+/**
+ * Encerra a sessão no servidor. O cliente do Better Auth não lança erro, devolve { error }:
+ * sem conferir, uma saída recusada pareceria ter dado certo e a pessoa continuaria logada.
+ */
+export async function signOut() {
+  const { error } = await authClient.signOut()
+  if (error) throw new Error('Não foi possível sair. Tente de novo.')
 }
