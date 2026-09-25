@@ -1,4 +1,4 @@
-import type { GroupMember } from '@bolso/shared'
+import type { GroupContents, GroupMember } from '@bolso/shared'
 import { api } from '@/lib/api-client'
 
 export type PendingInvitation = { id: string; email: string; expiresAt: string; link: string }
@@ -43,4 +43,13 @@ export function getInvitation(id: string) {
 
 export function acceptInvitation(id: string) {
   return api<{ groupId: string }>(`/invitations/${id}/accept`, { method: 'POST' })
+}
+
+export function getGroupContents(id: string) {
+  return api<GroupContents>(`/groups/${id}/contents`)
+}
+
+/** Sem volta: leva embora tudo o que era daquele orçamento. Devolve para qual a sessão foi */
+export function deleteGroup(id: string) {
+  return api<{ id: string; activeGroupId: string }>(`/groups/${id}`, { method: 'DELETE' })
 }

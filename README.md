@@ -16,7 +16,7 @@ Sistema de **orçamento colaborativo**: **leve, rápido, bonito e em tempo real*
 | Tipos e validações compartilhados (`packages/shared`) | ✅ Um Zod só, válido para o front e para a API |
 | Tempo real | ✅ WebSocket por grupo, testado com duas pessoas: a mudança aparece na outra tela em ~15ms |
 | Login | ✅ Sessões com Better Auth. **Google configurado** (em desenvolvimento); faltam Apple e Microsoft (ver [Pendências](#pendências)). A tela de login só tem os botões dos provedores |
-| Orçamentos | ✅ Um orçamento pessoal no primeiro acesso, convite por link, troca de orçamento |
+| Orçamentos | ✅ Um orçamento pessoal no primeiro acesso, convite por link, troca e exclusão de orçamento |
 | Ajustes | ✅ Perfil, Orçamentos, Categorias, Contas, Contatos, Integrações e Chaves de API, tudo gravando no banco |
 | **Lançamentos** | ✅ Cartão de crédito com fatura, compras parceladas, lançamento dividido em categorias, cópia de lançamento e contato, em tempo real |
 | **Importar extrato (OFX)** | ✅ Lê o arquivo do banco, concilia com o que já foi lançado e importa o resto |
@@ -421,6 +421,7 @@ Feitos com **Better Auth**, que grava sessões no próprio banco. O plugin de or
 - **Primeiro acesso:** ao criar a conta, a pessoa já ganha um grupo pessoal ("Meu Bolso") com **10 categorias iniciais** prontas, algumas com subcategorias. Ninguém começa com a tela vazia.
 - **Convite:** em Ajustes → Orçamentos, escrever o e-mail gera um **link**, que já vai copiado para a área de transferência (serve para mandar no WhatsApp). Quem abre o link vê para qual orçamento é o convite e entra com um clique. O link continua valendo quando existir envio por e-mail: o convite é o mesmo.
 - **Várias pessoas, vários orçamentos:** cada pessoa pode estar em mais de um orçamento (o dela e o da casa, por exemplo) e troca em Ajustes → Orçamentos. A sessão guarda qual é o orçamento em uso.
+- **Excluir um orçamento** é o único lugar do Bolso onde algo sai do banco de verdade: não há lixeira nem desfazer. Só o dono exclui, a tela diz quantos lançamentos, contas e categorias vão junto e pede o **nome escrito à mão**. Ninguém fica sem nenhum orçamento: quem só participava daquele ganha um próprio de volta, como no primeiro acesso.
 - **A tela de login mostra só os provedores configurados** (pergunta em `/api/auth-providers`). Em desenvolvimento, os que faltam aparecem desligados, para lembrar o que falta; em produção, somem.
 - **Depois de entrar, a pessoa volta para onde queria ir** (`/entrar?continuar=/lancamentos`). Se o provedor recusar ou ela cancelar, volta para `/entrar` com o motivo num aviso, em vez de uma página de erro crua.
 - **Mesmo e-mail, mesma conta:** quem já tinha conta e entra pelo Google com o mesmo e-mail cai na conta que já existia (o Google confirma o e-mail, então a ligação é automática).
@@ -815,9 +816,13 @@ Conciliar é dizer que **este** lançamento é **aquele** movimento do banco. É
 conferência do Bolso: quando vale, o número deixa de ser o que alguém digitou e passa a ser o
 que o banco confirma. Por isso ela é guardada como uma **prova**, e não como um campo solto.
 
-**De onde vem aparece na tela.** O lançamento mostra "conciliado · Open Finance", "conciliado ·
-extrato OFX", ou os dois quando o mesmo movimento chegou pelos dois caminhos — e aí são duas
-confirmações independentes do mesmo número. Um lançamento já conferido pelo extrato continua
+**De onde vem aparece na tela.** Na lista, o lançamento conciliado leva um **vínculo azul** ao
+lado dos detalhes — e só isso: o texto seria o mesmo em cada linha conferida, e repetido vira
+ruído. De onde vem a conciliação está no hover ("Conciliado via Open Finance", "Conciliado via
+extrato OFX") e no rótulo acessível do ícone, para quem não tem hover. Dentro do lançamento,
+onde a informação é uma só, ela aparece por extenso, com a data em que foi conferida e os dois
+caminhos quando o mesmo movimento chegou pelos dois — e aí são duas confirmações independentes
+do mesmo número. Um lançamento já conferido pelo extrato continua
 disponível para conciliar com o Open Finance: é o mesmo movimento, e as duas provas somam. O
 que não se repete é a mesma origem duas vezes, nem o mesmo movimento em dois lançamentos — o
 índice único `(grupo, origem, identificador)` garante isso no banco de dados, mesmo com duas

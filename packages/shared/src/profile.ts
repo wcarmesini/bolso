@@ -38,3 +38,18 @@ export const inviteInputSchema = z.object({ email: z.email('E-mail inválido') }
 export const createGroupInputSchema = z.object({
   name: z.string().trim().min(1, 'Informe um nome').max(40, 'Use até 40 caracteres'),
 })
+
+/**
+ * O que existe dentro de um orçamento.
+ *
+ * Serve à confirmação antes de excluir: dizer "apaga tudo" é abstrato, dizer "apaga 412
+ * lançamentos e 6 contas" é o tamanho real da decisão.
+ */
+export type GroupContents = {
+  id: string
+  name: string
+  people: number
+  accounts: number
+  categories: number
+  transactions: number
+}

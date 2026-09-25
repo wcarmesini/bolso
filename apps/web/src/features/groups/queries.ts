@@ -3,6 +3,8 @@ import {
   acceptInvitation,
   activateGroup,
   createGroup,
+  deleteGroup,
+  getGroupContents,
   inviteToGroup,
   listInvitations,
   listMembers,
@@ -55,5 +57,29 @@ export function useAcceptInvitation() {
   return useMutation({
     mutationFn: acceptInvitation,
     onSuccess: () => queryClient.invalidateQueries(),
+  })
+}
+
+// O que existe dentro de um orçamento: só é buscado quando a confirmação de exclusão abre
+export function useGroupContents(id: string | null) {
+  return useQuery({
+    queryKey: ['group-contents', id],
+    queryFn: () => getGroupContents(id ?? ''),
+    enabled: id !== null,
+  })
+}
+
+// Excluir derruba o orçamento inteiro e pode trocar o em uso: recarrega o cache todo
+export function useDeleteGroup() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: deleteGroup,
+    onSuccess: (_resultado, id) => {
+      // Menos o conteúdo do que acabou de ser excluído: perguntar de novo daria 404
+      queryClient.removeQueries({ queryKey: ['group-contents', id] })
+      queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] !== 'group-contents',
+      })
+    },
   })
 }

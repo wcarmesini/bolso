@@ -1,5 +1,5 @@
 import type { GroupRole } from '@bolso/shared'
-import { BookOpen, Check, MoreHorizontal, Pencil, Plus, UserPlus } from 'lucide-react'
+import { BookOpen, Check, MoreHorizontal, Pencil, Plus, Trash2, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { SectionHeader } from '@/components/section-header'
@@ -9,12 +9,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useMe } from '@/features/auth/queries'
 import { getInitials } from '@/lib/current-user'
 import { errorMessage } from '@/lib/errors'
 import { useActivateGroup, useGroupInvitations, useGroupMembers } from '../queries'
+import { DeleteGroupDialog } from './delete-group-dialog'
 import { InviteDialog } from './invite-dialog'
 import { NameDialog } from './name-dialog'
 
@@ -34,9 +36,10 @@ const pessoas = (quantas: number) =>
  * formulário do que está em uso com listas soltas em volta. Renomear e convidar são ações do
  * orçamento, no menu dele; os outros mostram o que são e o caminho para entrar.
  *
- * As ações valem para o orçamento **em uso**: renomear e convidar mexem no que a sessão tem
- * aberto. Nos outros, o caminho é "Usar" primeiro — o que é honesto, porque é assim que o
- * servidor funciona, e evita a tela prometer algo que ela não faria.
+ * Renomear e convidar valem para o orçamento **em uso**: são o que a sessão tem aberto. Nos
+ * outros, o caminho é "Usar" primeiro — o que é honesto, porque é assim que o servidor funciona,
+ * e evita a tela prometer algo que ela não faria. Excluir é a exceção: dá para excluir um
+ * orçamento parado sem precisar entrar nele, que é justamente o caso comum.
  */
 export function GroupSettings() {
   const { data: me } = useMe()
@@ -47,6 +50,7 @@ export function GroupSettings() {
   const [renomeando, setRenomeando] = useState(false)
   const [criando, setCriando] = useState(false)
   const [convidando, setConvidando] = useState(false)
+  const [excluindo, setExcluindo] = useState<{ id: string; name: string } | null>(null)
 
   const emUso = me?.activeGroup
   const podeAdministrar = emUso?.role === 'owner' || emUso?.role === 'admin'
@@ -137,7 +141,7 @@ export function GroupSettings() {
                   </Button>
                 )}
 
-                {ativo && podeAdministrar && (
+                {(ativo ? podeAdministrar : group.role === 'owner') && (
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       aria-label={`Ações de ${group.name}`}
@@ -151,15 +155,32 @@ export function GroupSettings() {
                     >
                       <MoreHorizontal className="size-4" />
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setConvidando(true)}>
-                        <UserPlus />
-                        Convidar alguém
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setRenomeando(true)}>
-                        <Pencil />
-                        Renomear
-                      </DropdownMenuItem>
+                    {/* O menu se mede pelo gatilho, e o gatilho aqui é um ícone: largura na mão */}
+                    <DropdownMenuContent align="end" className="w-52">
+                      {ativo && (
+                        <>
+                          <DropdownMenuItem onClick={() => setConvidando(true)}>
+                            <UserPlus />
+                            Convidar alguém
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setRenomeando(true)}>
+                            <Pencil />
+                            Renomear
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      {group.role === 'owner' && (
+                        <>
+                          {ativo && <DropdownMenuSeparator />}
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => setExcluindo({ id: group.id, name: group.name })}
+                          >
+                            <Trash2 />
+                            Excluir orçamento
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
@@ -182,6 +203,12 @@ export function GroupSettings() {
       />
       <NameDialog open={criando} onOpenChange={setCriando} atual="" modo="criar" />
       <InviteDialog open={convidando} onOpenChange={setConvidando} />
+      <DeleteGroupDialog
+        group={excluindo}
+        onOpenChange={(open) => {
+          if (!open) setExcluindo(null)
+        }}
+      />
     </>
   )
 }
