@@ -95,7 +95,12 @@ export function groupsRoutes(deps: Deps) {
       // Convites pendentes (ainda não aceitos e dentro do prazo)
       .get('/current/invitations', async (c) => {
         const rows = await db
-          .select({ id: invitation.id, email: invitation.email, expiresAt: invitation.expiresAt })
+          .select({
+            id: invitation.id,
+            email: invitation.email,
+            role: invitation.role,
+            expiresAt: invitation.expiresAt,
+          })
           .from(invitation)
           .where(
             and(
@@ -108,6 +113,8 @@ export function groupsRoutes(deps: Deps) {
           rows.map((row) => ({
             id: row.id,
             email: row.email,
+            // O nível com que a pessoa vai entrar: a tela de compartilhar mostra isso
+            role: row.role === 'viewer' ? 'viewer' : 'member',
             expiresAt: row.expiresAt.toISOString(),
             link: `${env.PUBLIC_URL}/convite/${row.id}`,
           })),
@@ -127,7 +134,12 @@ export function groupsRoutes(deps: Deps) {
         )
         notify(deps, c, 'group')
         return c.json(
-          { id: created.id, email: created.email, link: `${env.PUBLIC_URL}/convite/${created.id}` },
+          {
+            id: created.id,
+            email: created.email,
+            role,
+            link: `${env.PUBLIC_URL}/convite/${created.id}`,
+          },
           201,
         )
       })

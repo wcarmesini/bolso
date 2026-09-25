@@ -35,11 +35,6 @@ export const roleLabels: Record<GroupRole, string> = {
   viewer: 'Pode ver',
 }
 
-export const roleHints: Record<AccessLevel, string> = {
-  member: 'Lança, edita e exclui — tudo, menos mexer em quem tem acesso',
-  viewer: 'Enxerga tudo e não muda nada',
-}
-
 /** A pergunta que o servidor faz antes de deixar gravar qualquer coisa do orçamento */
 export const canEdit = (role: GroupRole | undefined) => role !== undefined && role !== 'viewer'
 

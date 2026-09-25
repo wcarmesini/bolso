@@ -224,11 +224,18 @@ describe('tirar o acesso', () => {
     expect(contas.body.map((conta) => conta.name)).not.toContain('Conta corrente')
   })
 
-  it('um convite pendente pode ser desfeito', async () => {
-    const convite = await ana.json<{ id: string }>('/api/groups/current/invitations', {
-      method: 'POST',
-      body: JSON.stringify({ email: 'ninguem@exemplo.com', role: 'viewer' }),
-    })
+  it('um convite pendente mostra o nível e pode ser desfeito', async () => {
+    const convite = await ana.json<{ id: string; role: string }>(
+      '/api/groups/current/invitations',
+      { method: 'POST', body: JSON.stringify({ email: 'ninguem@exemplo.com', role: 'viewer' }) },
+    )
+    expect(convite.body.role).toBe('viewer')
+
+    // A tela de compartilhar diz com que nível a pessoa vai entrar: o nível vem na lista
+    const esperando = await ana.json<{ email: string; role: string }[]>(
+      '/api/groups/current/invitations',
+    )
+    expect(esperando.body.find((item) => item.email === 'ninguem@exemplo.com')?.role).toBe('viewer')
     const cancelado = await ana.request(`/api/groups/current/invitations/${convite.body.id}`, {
       method: 'DELETE',
     })

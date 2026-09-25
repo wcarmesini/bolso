@@ -60,7 +60,13 @@ function SelectContent({
   sideOffset = 4,
   align = 'center',
   alignOffset = 0,
-  alignItemWithTrigger = true,
+  /*
+   * O padrão do Base UI é a lista cobrir o gatilho, para o item escolhido cair exatamente
+   * sobre o texto do valor. Em caixa apertada — dentro de um diálogo, por exemplo — ela
+   * escapa para o lado e tapa o que está ao redor. Aqui a lista abre embaixo, como todo
+   * mundo espera de um menu.
+   */
+  alignItemWithTrigger = false,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<

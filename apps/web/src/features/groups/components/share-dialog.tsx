@@ -1,12 +1,6 @@
-import {
-  type AccessLevel,
-  accessLevels,
-  inviteInputSchema,
-  roleHints,
-  roleLabels,
-} from '@bolso/shared'
+import { type AccessLevel, accessLevels, inviteInputSchema, roleLabels } from '@bolso/shared'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Check, Copy, UserPlus, X } from 'lucide-react'
+import { Check, ChevronDown, Copy, UserPlus, X } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -19,6 +13,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
@@ -42,7 +43,59 @@ import {
 
 const niveis = accessLevels.map((nivel) => ({ value: nivel, label: roleLabels[nivel] }))
 
-/** O seletor de nível, do lado de cada pessoa e do campo de convite */
+/**
+ * O que dá para fazer com o acesso de alguém, num controle só.
+ *
+ * Trocar o nível e tirar o acesso são a mesma decisão vista de dois jeitos, então moram no
+ * mesmo menu — e a linha fica com uma coisa à direita, não três.
+ */
+function AcessoDe({
+  nome,
+  nivel,
+  ocupado,
+  onNivel,
+  onTirar,
+}: {
+  nome: string
+  nivel: AccessLevel
+  ocupado: boolean
+  onNivel: (nivel: AccessLevel) => void
+  onTirar: () => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={`Acesso de ${nome}`}
+        disabled={ocupado}
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0 text-muted-foreground font-normal"
+          />
+        }
+      >
+        {roleLabels[nivel]}
+        <ChevronDown className="opacity-70" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        {accessLevels.map((opcao) => (
+          <DropdownMenuItem key={opcao} onClick={() => onNivel(opcao)}>
+            <Check className={opcao === nivel ? '' : 'opacity-0'} />
+            {roleLabels[opcao]}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={onTirar}>
+          <X />
+          Tirar o acesso
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** O seletor de nível do campo de convite */
 function NivelSelect({
   value,
   onValueChange,
@@ -61,7 +114,8 @@ function NivelSelect({
       disabled={disabled}
       onValueChange={(next) => onValueChange(next as AccessLevel)}
     >
-      <SelectTrigger size="sm" aria-label={label} className="w-32 shrink-0">
+      {/* Mesma altura do campo de e-mail e do botão ao lado: os três formam uma linha só */}
+      <SelectTrigger aria-label={label} className="w-36 shrink-0">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -194,29 +248,30 @@ export function ShareDialog({
 
                   {/* No dono e em você mesmo, o nível é só informação: não há o que trocar */}
                   {dono || euMesmo ? (
-                    <span className="shrink-0 px-2 text-muted-foreground text-xs">
+                    /*
+                     * Aqui o nível é só informação — mas ocupa a mesma caixa do menu ao lado,
+                     * com a seta invisível no lugar dela, para os rótulos caírem na mesma
+                     * coluna. Sem isso, "Dono" avança sobre a margem e a lista torta salta aos
+                     * olhos.
+                     */
+                    <Button
+                      render={<span />}
+                      nativeButton={false}
+                      variant="ghost"
+                      size="sm"
+                      className="pointer-events-none shrink-0 font-normal text-muted-foreground"
+                    >
                       {roleLabels[member.role]}
-                    </span>
+                      <ChevronDown className="invisible opacity-70" aria-hidden />
+                    </Button>
                   ) : (
-                    <>
-                      <NivelSelect
-                        value={member.role === 'viewer' ? 'viewer' : 'member'}
-                        disabled={mudarNivel.isPending}
-                        label={`Nível de ${member.name}`}
-                        onValueChange={(nivel) => void trocar(member.id, member.name, nivel)}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Tirar o acesso de ${member.name}`}
-                        title="Tirar o acesso"
-                        className="shrink-0 text-muted-foreground hover:text-destructive"
-                        disabled={tirarAcesso.isPending}
-                        onClick={() => void tirar(member.id, member.name)}
-                      >
-                        <X />
-                      </Button>
-                    </>
+                    <AcessoDe
+                      nome={member.name}
+                      nivel={member.role === 'viewer' ? 'viewer' : 'member'}
+                      ocupado={mudarNivel.isPending || tirarAcesso.isPending}
+                      onNivel={(nivel) => void trocar(member.id, member.name, nivel)}
+                      onTirar={() => void tirar(member.id, member.name)}
+                    />
                   )}
                 </li>
               )
@@ -224,66 +279,74 @@ export function ShareDialog({
 
             {pendentes.map((convite) => (
               <li key={convite.id} className="flex items-center gap-2.5 px-1 py-1.5">
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
-                  <UserPlus className="size-3.5" />
+                {/* Do tamanho de um avatar: as três linhas começam na mesma coluna */}
+                <span className="grid size-6 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+                  <UserPlus className="size-3" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{convite.email}</span>
-                  <span className="block text-muted-foreground text-xs">
-                    Convite pendente · {roleLabels[convite.role].toLowerCase()}
-                  </span>
+                  <span className="block text-muted-foreground text-xs">Convite pendente</span>
                 </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 text-muted-foreground"
-                  onClick={() => void copiar(convite.id, convite.link)}
-                >
-                  {copiado === convite.id ? <Check /> : <Copy />}
-                  {copiado === convite.id ? 'Copiado' : 'Copiar link'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Cancelar o convite de ${convite.email}`}
-                  title="Cancelar o convite"
-                  className="shrink-0 text-muted-foreground hover:text-destructive"
-                  disabled={cancelarConvite.isPending}
-                  onClick={() => void cancelar(convite.id, convite.email)}
-                >
-                  <X />
-                </Button>
+                {/* Mesma forma da linha de cima: o nível à direita, e as ações dentro dele */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    aria-label={`Convite de ${convite.email}`}
+                    disabled={cancelarConvite.isPending}
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 font-normal text-muted-foreground"
+                      />
+                    }
+                  >
+                    {copiado === convite.id ? <Check /> : null}
+                    {copiado === convite.id ? 'Copiado' : roleLabels[convite.role]}
+                    <ChevronDown className="opacity-70" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={() => void copiar(convite.id, convite.link)}>
+                      <Copy />
+                      Copiar link
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => void cancelar(convite.id, convite.email)}
+                    >
+                      <X />
+                      Cancelar convite
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </li>
             ))}
           </ul>
 
-          <form onSubmit={enviar} className="flex flex-col gap-2 border-t pt-4">
-            <div className="flex items-start gap-2">
-              <Field data-invalid={Boolean(form.formState.errors.email)} className="flex-1">
-                <FieldLabel htmlFor="invite-email" className="sr-only">
-                  Convidar pelo e-mail
-                </FieldLabel>
-                <Input
-                  id="invite-email"
-                  type="email"
-                  placeholder="pessoa@exemplo.com"
-                  autoComplete="off"
-                  aria-invalid={Boolean(form.formState.errors.email)}
-                  {...form.register('email')}
-                />
-                <FieldError errors={[form.formState.errors.email]} />
-              </Field>
-              <NivelSelect
-                value={nivelNovo}
-                label="Nível de quem for convidado"
-                onValueChange={setNivelNovo}
+          <form onSubmit={enviar} className="flex items-start gap-2 border-t pt-4">
+            <Field data-invalid={Boolean(form.formState.errors.email)} className="flex-1">
+              <FieldLabel htmlFor="invite-email" className="sr-only">
+                Convidar pelo e-mail
+              </FieldLabel>
+              <Input
+                id="invite-email"
+                type="email"
+                placeholder="pessoa@exemplo.com"
+                autoComplete="off"
+                aria-invalid={Boolean(form.formState.errors.email)}
+                {...form.register('email')}
               />
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                <UserPlus />
-                {form.formState.isSubmitting ? 'Criando…' : 'Convidar'}
-              </Button>
-            </div>
-            <p className="text-muted-foreground text-xs">{roleHints[nivelNovo]}.</p>
+              <FieldError errors={[form.formState.errors.email]} />
+            </Field>
+            <NivelSelect
+              value={nivelNovo}
+              label="Nível de quem for convidado"
+              onValueChange={setNivelNovo}
+            />
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              <UserPlus />
+              {form.formState.isSubmitting ? 'Criando…' : 'Convidar'}
+            </Button>
           </form>
         </div>
       </DialogContent>
