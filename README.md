@@ -17,7 +17,7 @@ Sistema de **orçamento colaborativo**: **leve, rápido, bonito e em tempo real*
 | Tempo real | ✅ WebSocket por grupo, testado com duas pessoas: a mudança aparece na outra tela em ~15ms |
 | Login | ✅ Sessões com Better Auth. **Google configurado** (em desenvolvimento); faltam Apple e Microsoft (ver [Pendências](#pendências)). A tela de login só tem os botões dos provedores |
 | Orçamentos | ✅ Um orçamento pessoal no primeiro acesso, convite por link, troca e exclusão de orçamento |
-| Ajustes | ✅ Perfil, Orçamentos, Categorias, Contas, Contatos, Integrações e Chaves de API, tudo gravando no banco |
+| Ajustes | ✅ Perfil, Orçamentos, Categorias, Contas, Contatos, Lixeira, Integrações e Chaves de API, tudo gravando no banco |
 | **Lançamentos** | ✅ Cartão de crédito com fatura, compras parceladas, lançamento dividido em categorias, cópia de lançamento e contato, em tempo real |
 | **Importar extrato (OFX)** | ✅ Lê o arquivo do banco, concilia com o que já foi lançado e importa o resto |
 | **Banco conectado (Open Finance)** | ✅ Pluggy. O Bolso busca sozinho e o que chega **espera aprovação**; nada entra no orçamento sem alguém dizer que pode |
@@ -781,9 +781,9 @@ linha sai da fila, para a mesma coisa não aparecer duas vezes. Para resolver de
 **Dispensar**.
 
 **Excluir não apaga.** O lançamento ganha `deleted_at` e some de todas as telas e de todos os
-relatórios na hora, mas continua no banco: a **Lixeira** (o ícone ao lado do filtro de contas,
-em Lançamentos — ela não cria nada, então não mora no menu de lançar) mostra
-o que foi excluído, por quem, e traz de volta exatamente como estava — com as categorias, que
+relatórios na hora, mas continua no banco: a **Lixeira** (Ajustes → Lixeira, porque desfazer
+uma exclusão é coisa rara — quem precisa vai procurar, e quem não precisa não tropeça nela)
+mostra o que foi excluído, por quem, e traz de volta exatamente como estava — com as categorias, que
 nunca foram embora. Vale também para a transferência, cujas duas pernas somem e voltam juntas.
 
 O filtro de excluídos vive em todas as consultas de lançamento — lista, relatórios, orçamento,

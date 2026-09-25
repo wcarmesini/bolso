@@ -74,12 +74,8 @@ export function useTransactionHistory(id: string | null) {
   })
 }
 
-export function useDeletedTransactions(enabled: boolean) {
-  return useQuery({
-    queryKey: ['transactions', 'deleted'],
-    queryFn: listDeletedTransactions,
-    enabled,
-  })
+export function useDeletedTransactions() {
+  return useQuery({ queryKey: ['transactions', 'deleted'], queryFn: listDeletedTransactions })
 }
 
 export function useRestoreTransaction() {

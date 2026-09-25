@@ -6,6 +6,7 @@ import {
   Plug,
   Smartphone,
   Tags,
+  Trash2,
   UserRound,
 } from 'lucide-react'
 
@@ -39,6 +40,12 @@ export const settingsSections = [
     title: 'Contatos',
     description: 'Quem recebe ou paga',
     icon: Contact2,
+  },
+  {
+    to: '/ajustes/lixeira',
+    title: 'Lixeira',
+    description: 'Lançamentos excluídos, e como trazê-los de volta',
+    icon: Trash2,
   },
   {
     to: '/ajustes/integracoes',

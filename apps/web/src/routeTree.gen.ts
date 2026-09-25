@@ -23,6 +23,7 @@ import { Route as AppAjustesChavesApiRouteImport } from './routes/_app.ajustes.c
 import { Route as AppAjustesContasRouteImport } from './routes/_app.ajustes.contas'
 import { Route as AppAjustesContatosRouteImport } from './routes/_app.ajustes.contatos'
 import { Route as AppAjustesIntegracoesRouteImport } from './routes/_app.ajustes.integracoes'
+import { Route as AppAjustesLixeiraRouteImport } from './routes/_app.ajustes.lixeira'
 import { Route as AppAjustesOrcamentosRouteImport } from './routes/_app.ajustes.orcamentos'
 import { Route as AppAjustesPerfilRouteImport } from './routes/_app.ajustes.perfil'
 import { Route as AppConviteIdRouteImport } from './routes/_app.convite.$id'
@@ -98,6 +99,11 @@ const AppAjustesIntegracoesRoute = AppAjustesIntegracoesRouteImport.update({
   path: '/integracoes',
   getParentRoute: () => AppAjustesRoute,
 } as any)
+const AppAjustesLixeiraRoute = AppAjustesLixeiraRouteImport.update({
+  id: '/lixeira',
+  path: '/lixeira',
+  getParentRoute: () => AppAjustesRoute,
+} as any)
 const AppAjustesOrcamentosRoute = AppAjustesOrcamentosRouteImport.update({
   id: '/orcamentos',
   path: '/orcamentos',
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/ajustes/contas': typeof AppAjustesContasRoute
   '/ajustes/contatos': typeof AppAjustesContatosRoute
   '/ajustes/integracoes': typeof AppAjustesIntegracoesRoute
+  '/ajustes/lixeira': typeof AppAjustesLixeiraRoute
   '/ajustes/orcamentos': typeof AppAjustesOrcamentosRoute
   '/ajustes/perfil': typeof AppAjustesPerfilRoute
   '/convite/$id': typeof AppConviteIdRoute
@@ -156,6 +163,7 @@ export interface FileRoutesByTo {
   '/ajustes/contas': typeof AppAjustesContasRoute
   '/ajustes/contatos': typeof AppAjustesContatosRoute
   '/ajustes/integracoes': typeof AppAjustesIntegracoesRoute
+  '/ajustes/lixeira': typeof AppAjustesLixeiraRoute
   '/ajustes/orcamentos': typeof AppAjustesOrcamentosRoute
   '/ajustes/perfil': typeof AppAjustesPerfilRoute
   '/convite/$id': typeof AppConviteIdRoute
@@ -178,6 +186,7 @@ export interface FileRoutesById {
   '/_app/ajustes/contas': typeof AppAjustesContasRoute
   '/_app/ajustes/contatos': typeof AppAjustesContatosRoute
   '/_app/ajustes/integracoes': typeof AppAjustesIntegracoesRoute
+  '/_app/ajustes/lixeira': typeof AppAjustesLixeiraRoute
   '/_app/ajustes/orcamentos': typeof AppAjustesOrcamentosRoute
   '/_app/ajustes/perfil': typeof AppAjustesPerfilRoute
   '/_app/convite/$id': typeof AppConviteIdRoute
@@ -200,6 +209,7 @@ export interface FileRouteTypes {
     | '/ajustes/contas'
     | '/ajustes/contatos'
     | '/ajustes/integracoes'
+    | '/ajustes/lixeira'
     | '/ajustes/orcamentos'
     | '/ajustes/perfil'
     | '/convite/$id'
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/ajustes/contas'
     | '/ajustes/contatos'
     | '/ajustes/integracoes'
+    | '/ajustes/lixeira'
     | '/ajustes/orcamentos'
     | '/ajustes/perfil'
     | '/convite/$id'
@@ -240,6 +251,7 @@ export interface FileRouteTypes {
     | '/_app/ajustes/contas'
     | '/_app/ajustes/contatos'
     | '/_app/ajustes/integracoes'
+    | '/_app/ajustes/lixeira'
     | '/_app/ajustes/orcamentos'
     | '/_app/ajustes/perfil'
     | '/_app/convite/$id'
@@ -353,6 +365,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAjustesIntegracoesRouteImport
       parentRoute: typeof AppAjustesRoute
     }
+    '/_app/ajustes/lixeira': {
+      id: '/_app/ajustes/lixeira'
+      path: '/lixeira'
+      fullPath: '/ajustes/lixeira'
+      preLoaderRoute: typeof AppAjustesLixeiraRouteImport
+      parentRoute: typeof AppAjustesRoute
+    }
     '/_app/ajustes/orcamentos': {
       id: '/_app/ajustes/orcamentos'
       path: '/orcamentos'
@@ -398,6 +417,7 @@ interface AppAjustesRouteChildren {
   AppAjustesContasRoute: typeof AppAjustesContasRoute
   AppAjustesContatosRoute: typeof AppAjustesContatosRoute
   AppAjustesIntegracoesRoute: typeof AppAjustesIntegracoesRoute
+  AppAjustesLixeiraRoute: typeof AppAjustesLixeiraRoute
   AppAjustesOrcamentosRoute: typeof AppAjustesOrcamentosRoute
   AppAjustesPerfilRoute: typeof AppAjustesPerfilRoute
   AppAjustesIndexRoute: typeof AppAjustesIndexRoute
@@ -410,6 +430,7 @@ const AppAjustesRouteChildren: AppAjustesRouteChildren = {
   AppAjustesContasRoute: AppAjustesContasRoute,
   AppAjustesContatosRoute: AppAjustesContatosRoute,
   AppAjustesIntegracoesRoute: AppAjustesIntegracoesRoute,
+  AppAjustesLixeiraRoute: AppAjustesLixeiraRoute,
   AppAjustesOrcamentosRoute: AppAjustesOrcamentosRoute,
   AppAjustesPerfilRoute: AppAjustesPerfilRoute,
   AppAjustesIndexRoute: AppAjustesIndexRoute,

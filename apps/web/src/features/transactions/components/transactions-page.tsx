@@ -12,7 +12,6 @@ import {
   Plus,
   Split,
   Tag,
-  Trash2,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog'
@@ -54,7 +53,6 @@ import { DeleteTransactionDialog } from './delete-transaction-dialog'
 import { MonthSummary } from './month-summary'
 import { StatementSummary } from './statement-summary'
 import { TransactionFormDialog } from './transaction-form-dialog'
-import { TrashDialog } from './trash-dialog'
 
 const ALL = 'all'
 
@@ -122,7 +120,6 @@ export function TransactionsPage() {
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferindo, setTransferindo] = useState<Transaction | null>(null)
   const [apagandoTransfer, setApagandoTransfer] = useState<Transaction | null>(null)
-  const [lixeiraAberta, setLixeiraAberta] = useState(false)
   const deleteTransfer = useDeleteTransfer()
 
   const categoryInfo = useMemo(() => categoryInfoById(categories), [categories])
@@ -191,27 +188,6 @@ export function TransactionsPage() {
             home={home}
           />
           <div className="flex items-center gap-2">
-            {/*
-             * A lixeira mora aqui, e não no menu de lançar: ela não cria nada, ela mostra o
-             * que foi tirado da lista. Fica ao lado do filtro, que é a outra coisa que muda o
-             * que se enxerga do mês.
-             */}
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Lixeira"
-                    className="text-muted-foreground"
-                    onClick={() => setLixeiraAberta(true)}
-                  />
-                }
-              >
-                <Trash2 />
-              </TooltipTrigger>
-              <TooltipContent>Lixeira: o que foi excluído</TooltipContent>
-            </Tooltip>
             {accounts.length > 0 && (
               <Select
                 items={accountItems}
@@ -342,8 +318,6 @@ export function TransactionsPage() {
           if (!open) setDeleting(null)
         }}
       />
-
-      <TrashDialog open={lixeiraAberta} onOpenChange={setLixeiraAberta} />
 
       <TransferFormDialog
         open={transferOpen}
