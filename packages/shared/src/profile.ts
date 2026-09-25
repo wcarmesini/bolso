@@ -20,7 +20,8 @@ export type GroupRole = (typeof groupRoles)[number]
 export type Me = {
   user: { id: string; name: string; email: string; image: string | null }
   activeGroup: { id: string; name: string; role: GroupRole } | null
-  groups: { id: string; name: string; role: GroupRole }[]
+  /** Todos os orçamentos de que a pessoa participa, com quantas pessoas cada um tem */
+  groups: { id: string; name: string; role: GroupRole; members: number }[]
 }
 
 export type GroupMember = {

@@ -1,6 +1,6 @@
 import { type Me, updateProfileInputSchema } from '@bolso/shared'
 import { zValidator } from '@hono/zod-validator'
-import { asc, eq } from 'drizzle-orm'
+import { asc, count, eq, inArray } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { member, organization, user } from '../db/schema'
 import { type AppEnv, type Deps, onInvalid, toRole } from '../http'
@@ -17,7 +17,29 @@ export function meRoutes(deps: Deps) {
       .innerJoin(organization, eq(organization.id, member.organizationId))
       .where(eq(member.userId, userId))
       .orderBy(asc(member.createdAt))
-    const list = groups.map((group) => ({ ...group, role: toRole(group.role) }))
+    /*
+     * Quantas pessoas em cada orçamento. A tela de Orçamentos mostra isso em cada linha —
+     * sem isso, os outros orçamentos apareceriam mudos, só com o nome.
+     */
+    const quantos = groups.length
+      ? await db
+          .select({ organizationId: member.organizationId, total: count() })
+          .from(member)
+          .where(
+            inArray(
+              member.organizationId,
+              groups.map((group) => group.id),
+            ),
+          )
+          .groupBy(member.organizationId)
+      : []
+    const pessoasPor = new Map(quantos.map((linha) => [linha.organizationId, linha.total]))
+
+    const list = groups.map((group) => ({
+      ...group,
+      role: toRole(group.role),
+      members: pessoasPor.get(group.id) ?? 1,
+    }))
     return {
       user: {
         id: userId,
