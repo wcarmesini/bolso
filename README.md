@@ -317,9 +317,13 @@ desfazer pelo histórico devolve o valor inteiro e apaga as partes.
 
 **Detalhar antes de aprovar.** Ao lado da categoria, um lápis abre o **formulário completo**
 já preenchido com o que o banco mandou (valor, data, descrição, conta). Serve para o que a
-linha sozinha não diz: contato, parcelas, divisão em categorias, uma observação. Ao salvar, o
-lançamento passa a existir e a linha fica **conciliada** com ele — nada entra duas vezes. Quem
-só precisa da categoria continua resolvendo no próprio seletor, sem abrir nada.
+linha sozinha não diz: contato, parcelas, divisão em categorias, uma observação.
+
+No banco conectado, salvar ali **termina a linha**: o lançamento nasce já conciliado e a linha
+sai da fila. Antes ficava só uma marcação na tela, e quem não apertasse "Aprovar" acabava com o
+lançamento solto de um lado e a linha esperando do outro — a mesma coisa contada duas vezes,
+sem ninguém ter errado nada. No extrato OFX a marcação continua valendo até a confirmação do
+arquivo, porque ali não existe fila guardada: o arquivo é de uma vez só.
 
 **Cartão de crédito.** Cada compra cai na fatura do próprio mês, pelo dia de fechamento do
 cartão — importar três meses de uma vez continua certo, porque a conta é feita compra a compra

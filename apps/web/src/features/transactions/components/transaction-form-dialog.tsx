@@ -159,8 +159,16 @@ export function TransactionFormDialog({
   const submit = handleSubmit(async (values) => {
     try {
       const salvo = await saveTransaction.mutateAsync({ id: transaction?.id, values, scope })
-      onSaved?.(salvo)
       onOpenChange(false)
+      /*
+       * Quem abriu o formulário para um fim próprio (conferir uma linha do banco, por
+       * exemplo) conta o que aconteceu com as palavras dele. Dois avisos para a mesma ação
+       * é ruído.
+       */
+      if (onSaved) {
+        onSaved(salvo)
+        return
+      }
       toast.success(
         transaction
           ? 'Lançamento atualizado'

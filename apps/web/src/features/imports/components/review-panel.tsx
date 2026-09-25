@@ -144,6 +144,12 @@ type ReviewPanelProps = {
   resumo?: ReactNode
   salvando: boolean
   onConfirmar: (decisions: ImportDecision[]) => void | Promise<void>
+  /*
+   * Resolve **uma** linha na hora, quando existe fila guardada do outro lado (o banco
+   * conectado). É o que faz o botão de detalhar terminar o serviço: quem preencheu o
+   * formulário inteiro e salvou já disse o que queria daquela linha.
+   */
+  onResolverUma?: (decision: ImportDecision) => Promise<void>
 }
 
 export function ReviewPanel({
@@ -153,6 +159,7 @@ export function ReviewPanel({
   resumo,
   salvando,
   onConfirmar,
+  onResolverUma,
 }: ReviewPanelProps) {
   const { data: categories = [] } = useCategories()
   const { data: accounts = [] } = useAccounts()
@@ -434,6 +441,27 @@ export function ReviewPanel({
         onSaved={(salvo) => {
           const linha = detalhando
           if (!linha) return
+          const conciliada: ImportDecision = {
+            fitId: linha.fitId,
+            action: 'link',
+            transactionId: salvo.id,
+            categoryId: null,
+            contactId: null,
+            counterAccountId: null,
+          }
+
+          /*
+           * Com fila guardada (banco conectado), salvar aqui **termina** a linha: ela sai da
+           * fila e o lançamento nasce já conciliado. Antes ficava só uma marcação na tela, e
+           * quem não apertasse "Aprovar" acabava com o lançamento solto e a linha esperando —
+           * dois sinais de que algo ficou pela metade.
+           */
+          if (onResolverUma) {
+            void onResolverUma(conciliada)
+            return
+          }
+
+          // No extrato não há fila guardada: a marcação vale até a confirmação do arquivo
           setCriados((atual) => [
             {
               id: salvo.id,
@@ -445,14 +473,9 @@ export function ReviewPanel({
             },
             ...atual,
           ])
-          // A linha passa a conciliar com o que acabou de nascer: não entra de novo
           setDecisoes((atual) => ({
             ...atual,
-            [linha.fitId]: {
-              ...(atual[linha.fitId] ?? decisaoPadrao(linha)),
-              action: 'link',
-              transactionId: salvo.id,
-            },
+            [linha.fitId]: { ...(atual[linha.fitId] ?? decisaoPadrao(linha)), ...conciliada },
           }))
         }}
       />

@@ -67,6 +67,17 @@ export function BankInbox() {
     }
   }
 
+  /** Uma linha resolvida sozinha (o botão de detalhar): some da fila na hora */
+  const resolverUma = async (decision: ImportDecision) => {
+    if (!conexao) return
+    try {
+      await aprovar.mutateAsync({ id: conexao.id, decisions: [decision] })
+      toast.success('Lançamento salvo e conciliado')
+    } catch (cause) {
+      toast.error(errorMessage(cause, 'Não foi possível conciliar.'))
+    }
+  }
+
   const confirmar = async (decisions: ImportDecision[]) => {
     if (!conexao) return
     try {
@@ -180,6 +191,7 @@ export function BankInbox() {
           textos={textosDoBanco}
           salvando={aprovar.isPending}
           onConfirmar={confirmar}
+          onResolverUma={resolverUma}
           resumo={
             <p className="text-muted-foreground text-xs">
               {[conexao?.connectorName, conexao?.externalAccountName, conexao?.accountName]
