@@ -1,6 +1,7 @@
 import {
   isCreditCard,
   type ReportBasis,
+  reconciliationLabel,
   reportBasisLabels,
   type Transaction,
   type TransactionType,
@@ -132,7 +133,10 @@ export function MonthlyDetailDialog({ target, onOpenChange }: MonthlyDetailDialo
           ? `${cartao ? 'vence' : 'pago'} em ${shortDate(transaction.paymentDate)}`
           : 'sem data de pagamento'
     partes.push(outraData)
-    if (transaction.origin === 'ofx') partes.push('importado')
+    // O mesmo selo da lista: aqui sem ícone, porque a linha já é uma frase só
+    if (transaction.sources.length > 0) {
+      partes.push(`conciliado via ${reconciliationLabel(transaction.sources)}`)
+    }
     partes.push(`por ${transaction.createdByName.split(' ')[0]}`)
     return partes.join(' · ')
   }

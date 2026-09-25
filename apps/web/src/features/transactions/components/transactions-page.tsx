@@ -8,6 +8,7 @@ import {
   Copy,
   CreditCard,
   FileUp,
+  Link2,
   Plus,
   Split,
   Tag,
@@ -408,14 +409,6 @@ function TransactionRow({
           : transaction.paymentDate
             ? undefined
             : 'a pagar',
-        /*
-         * A conciliação é o selo de conferência do lançamento: ela diz que aquele número não
-         * é só o que alguém digitou, é o que o banco confirmou. Por isso aparece com a
-         * origem — e com as duas, quando o mesmo movimento chegou pelos dois caminhos.
-         */
-        transaction.sources.length > 0
-          ? `conciliado · ${reconciliationLabel(transaction.sources)}`
-          : undefined,
       ].filter(Boolean)
 
   return (
@@ -440,9 +433,21 @@ function TransactionRow({
             </span>
           )}
         </span>
-        {details.length > 0 && (
-          <span className="block truncate text-muted-foreground text-xs">
-            {details.join(' · ')}
+        {(details.length > 0 || transaction.sources.length > 0) && (
+          <span className="flex items-center gap-1 text-muted-foreground text-xs">
+            {details.length > 0 && <span className="truncate">{details.join(' · ')}</span>}
+            {/*
+             * O selo de conferência: este número não é só o que alguém digitou, é o que o
+             * banco confirmou. Vai com o ícone de vínculo e o nome da origem — e com as
+             * duas, quando o mesmo movimento chegou pelos dois caminhos.
+             */}
+            {transaction.sources.length > 0 && (
+              <span className="flex shrink-0 items-center gap-1">
+                {details.length > 0 && <span aria-hidden>·</span>}
+                <Link2 className="size-3" />
+                Conciliado via {reconciliationLabel(transaction.sources)}
+              </span>
+            )}
           </span>
         )}
       </span>
