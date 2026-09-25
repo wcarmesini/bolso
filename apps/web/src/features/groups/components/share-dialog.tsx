@@ -88,7 +88,7 @@ function AcessoDe({
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={onTirar}>
           <X />
-          Tirar o acesso
+          Remover Acesso
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

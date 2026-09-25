@@ -323,8 +323,69 @@ describe('importar e conciliar', () => {
     })
     // O que casa com o extrato não entra nessa lista
     expect(lido.body.unmatched.some((item) => item.description === 'POSTO IPIRANGA')).toBe(false)
+    expect(semPar?.installment).toBeNull()
 
     await ana.request(`/api/transactions/${sobrando.body.id}`, { method: 'DELETE' })
+  })
+
+  it('o número da parcela desempata dez lançamentos idênticos', async () => {
+    const compra = await ana.json<Transaction>('/api/transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'expense',
+        amountCents: 870_000,
+        description: 'Pacote de vacinas',
+        accountId: conta.id,
+        purchaseDate: '2026-09-17',
+        paymentDate: '2026-09-17',
+        splits: [{ categoryId: mercado, amountCents: 870_000 }],
+        installments: 10,
+      }),
+    })
+
+    /*
+     * Dez lançamentos de R$ 870,00, mesma descrição e mesma competência: nada os separa a não
+     * ser o número da parcela, que o extrato traz no texto ("PARC 02/10").
+     */
+    const arquivo = extrato(
+      lancamentoOfx('V1', '20260921', '-870.00', 'PARC=110IMUNO PARC 02/10 SAO JOSE BR'),
+    )
+    const lido = await preview(arquivo)
+
+    const linha = lido.body.rows[0]
+    expect(linha?.status).toBe('match')
+    expect(linha?.match?.installment).toEqual({ number: 2, count: 10 })
+
+    // E as outras nove ficam à mão, cada uma sabendo qual é
+    expect(linha?.candidates.every((item) => item.installment !== null)).toBe(true)
+
+    await ana.request(`/api/transactions/${compra.body.id}?scope=series`, { method: 'DELETE' })
+  })
+
+  it('a parcela vem junto, para a tela dizer qual das dez ficou sem par', async () => {
+    const compra = await ana.json<Transaction>('/api/transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'expense',
+        amountCents: 30_000,
+        description: 'Geladeira',
+        accountId: conta.id,
+        purchaseDate: '2026-09-18',
+        paymentDate: '2026-09-18',
+        splits: [{ categoryId: mercado, amountCents: 30_000 }],
+        installments: 3,
+      }),
+    })
+
+    const lido = await preview(extrato(lancamentoOfx('S2', '20260919', '-31.00', 'POSTO IPIRANGA')))
+    const parcelas = lido.body.unmatched.filter((item) => item.description === 'Geladeira')
+    expect(parcelas.map((item) => item.installment)).toEqual([
+      { number: 1, count: 3 },
+      { number: 2, count: 3 },
+      { number: 3, count: 3 },
+    ])
+
+    await ana.request(`/api/transactions/${compra.body.id}?scope=series`, { method: 'DELETE' })
   })
 
   it('confere se o extrato fecha: saldo anterior mais movimento dá o saldo final', async () => {

@@ -41,6 +41,7 @@ import { useAccounts } from '@/features/accounts/queries'
 import { useCategories } from '@/features/categories/queries'
 import { categoryTree, searchKey } from '@/features/transactions/category-options'
 import { CategoryPicker } from '@/features/transactions/components/category-picker'
+import { InstallmentBadge } from '@/features/transactions/components/installment-badge'
 import { TransactionFormDialog } from '@/features/transactions/components/transaction-form-dialog'
 import { shortDate } from '@/lib/dates'
 import { formatCents } from '@/lib/money'
@@ -698,6 +699,8 @@ function Linha({
             {row.status === 'imported' ? 'Já é ' : 'Concilia com '}
             <span className="font-medium">
               {escolhido.description || 'lançamento sem descrição'}
+              {escolhido.installment &&
+                ` ${escolhido.installment.number}/${escolhido.installment.count}`}
             </span>
             {escolhido.categoryName && ` em ${escolhido.categoryName}`}
             {` · ${shortDate(escolhido.purchaseDate)}`}
@@ -844,8 +847,13 @@ function SemPar({
         {itens.map((item) => (
           <li key={item.id} className="flex items-baseline justify-between gap-3 px-4 py-2.5">
             <span className="min-w-0">
-              <span className="block truncate text-sm">
-                {item.description || 'Lançamento sem descrição'}
+              {/* A parcela ao lado do nome, como na lista de lançamentos: é por ela que a
+                  pessoa reconhece qual das dez é esta */}
+              <span className="flex items-center gap-1.5">
+                <span className="truncate text-sm">
+                  {item.description || 'Lançamento sem descrição'}
+                </span>
+                <InstallmentBadge installment={item.installment} />
               </span>
               <span className="block truncate text-muted-foreground text-xs">
                 {[shortDate(item.purchaseDate), item.categoryName].filter(Boolean).join(' · ')}
@@ -953,9 +961,13 @@ function EscolherPar({ row, escolhidoId, disponiveis, emUso, onEscolher }: Escol
                   }}
                   className="flex-col items-start gap-0.5"
                 >
-                  <span className="flex w-full items-baseline justify-between gap-2">
-                    <span className="min-w-0 truncate">
-                      {item.description || 'Lançamento sem descrição'}
+                  <span className="flex w-full items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate">
+                        {item.description || 'Lançamento sem descrição'}
+                      </span>
+                      {/* Dez parcelas da mesma compra são idênticas menos por isto */}
+                      <InstallmentBadge installment={item.installment} />
                     </span>
                     <span className="shrink-0 tabular-nums">{formatCents(item.amountCents)}</span>
                   </span>

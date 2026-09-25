@@ -42,19 +42,48 @@ function semelhanca(a: string, b: string) {
 }
 
 /**
+ * Quando os dois lados dizem qual parcela é.
+ *
+ * Uma compra em dez vezes vira dez lançamentos idênticos: mesmo valor, mesma descrição e — na
+ * regra do Bolso — a mesma competência, a data da compra. Nada os separa, a não ser o número
+ * da parcela, que o banco manda e nós guardamos. Por isso ele pesa mais que tudo aqui: é o
+ * único sinal que distingue a 2/10 da 7/10.
+ */
+function notaDaParcela(
+  daLinha: { number: number; count: number } | null,
+  doLancamento: { installmentNumber: number | null; installmentCount: number | null },
+) {
+  const numero = doLancamento.installmentNumber
+  const total = doLancamento.installmentCount
+  if (!daLinha || !numero || !total) return 0
+  if (daLinha.number !== numero) return -400
+  return daLinha.count === total ? 400 : 150
+}
+
+/**
  * Nota de um par (linha de fora × lançamento já feito). Mesma data vale mais que a descrição
  * parecida, porque descrição de banco raramente bate com o que a pessoa digitou — mas quando
  * bate, é sinal forte e desempata dois lançamentos do mesmo valor.
  */
 function pontuar(
-  item: { date: string; description: string },
-  row: { purchaseDate: string; description: string },
+  item: { date: string; description: string; installment: LinhaDeFora['installment'] },
+  row: {
+    purchaseDate: string
+    description: string
+    installmentNumber: number | null
+    installmentCount: number | null
+  },
 ) {
   const distancia = Math.round(
     Math.abs(Date.parse(`${row.purchaseDate}T12:00:00Z`) - Date.parse(`${item.date}T12:00:00Z`)) /
       86_400_000,
   )
-  return 1000 - distancia * 50 + semelhanca(item.description, row.description) * 120
+  return (
+    1000 -
+    distancia * 50 +
+    semelhanca(item.description, row.description) * 120 +
+    notaDaParcela(item.installment, row)
+  )
 }
 
 /** Do banco para o Bolso: valor sempre positivo, o sinal vira o tipo */
@@ -86,6 +115,8 @@ export type Existente = {
    * chegando por dois caminhos, e as duas confirmações valem.
    */
   externalId: string | null
+  installmentNumber: number | null
+  installmentCount: number | null
 }
 
 /** Lançamentos da conta na janela das linhas de fora, para procurar parecidos e já entrados */
@@ -108,6 +139,8 @@ export async function carregarExistentes(
         amountCents: transactions.amountCents,
         type: transactions.type,
         externalId: transactionSources.externalId,
+        installmentNumber: transactions.installmentNumber,
+        installmentCount: transactions.installmentCount,
       })
       .from(transactions)
       /*
@@ -161,6 +194,10 @@ export function conciliar(
     amountCents: row.amountCents,
     categoryName: nomeDaCategoria.get(row.id) ?? null,
     type: row.type,
+    installment:
+      row.installmentNumber && row.installmentCount
+        ? { number: row.installmentNumber, count: row.installmentCount }
+        : null,
   })
 
   const deFora = linhas.filter((item) => !porExternalId.has(item.fitId))

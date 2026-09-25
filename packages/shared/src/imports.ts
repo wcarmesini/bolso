@@ -27,6 +27,8 @@ export type ImportMatch = {
   categoryName: string | null
   /** Saída ou entrada, para a tela mostrar o sinal certo */
   type: 'expense' | 'income'
+  /** A parcela, quando o lançamento é de uma série: "2/10", como na lista de lançamentos */
+  installment: { number: number; count: number } | null
 }
 
 export type ImportRow = {

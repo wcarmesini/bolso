@@ -51,6 +51,7 @@ import { amountTone, formatSignedCents } from '../amount'
 import { type CategoryInfo, categoryInfoById } from '../category-options'
 import { useTransactions } from '../queries'
 import { DeleteTransactionDialog } from './delete-transaction-dialog'
+import { InstallmentBadge } from './installment-badge'
 import { MonthSummary } from './month-summary'
 import { StatementSummary } from './statement-summary'
 import { TransactionFormDialog } from './transaction-form-dialog'
@@ -427,11 +428,7 @@ function TransactionRow({
       <span className="min-w-0">
         <span className="flex items-center gap-1.5">
           <span className="truncate text-sm">{title}</span>
-          {series && (
-            <span className="shrink-0 rounded bg-muted px-1 text-[11px] text-muted-foreground tabular-nums">
-              {series.number}/{series.count}
-            </span>
-          )}
+          <InstallmentBadge installment={series} />
         </span>
         {(details.length > 0 || transaction.sources.length > 0) && (
           <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
