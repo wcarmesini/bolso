@@ -1,5 +1,6 @@
 import {
   type EditScope,
+  isReconciled,
   type Transaction,
   type TransactionFormValues,
   transactionFormSchema,
@@ -23,6 +24,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { today } from '@/lib/dates'
 import { errorMessage, FieldValidationError } from '@/lib/errors'
 import { useSaveTransaction } from '../queries'
+import { ProvaDaConciliacao } from './reconciliation-note'
 import { SplitsField } from './splits-field'
 import {
   AccountField,
@@ -176,6 +178,7 @@ export function TransactionFormDialog({
   })
 
   const series = transaction?.installment ?? null
+  const travado = isReconciled(transaction?.sources)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -222,10 +225,10 @@ export function TransactionFormDialog({
               </Field>
             )}
 
-            <TypeField control={control} onTypeChange={limparCategorias} />
+            <TypeField control={control} onTypeChange={limparCategorias} travado={travado} />
 
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
-              <AmountField control={control} />
+              <AmountField control={control} travado={travado} />
               <PurchaseDateField control={control} />
             </div>
 
@@ -234,12 +237,21 @@ export function TransactionFormDialog({
             <SplitsField form={form} />
 
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
-              <AccountField control={control} />
+              <AccountField control={control} travado={travado} />
               <ContactField control={control} />
             </div>
 
             <CashFields control={control} editando={Boolean(transaction)} setValue={setValue} />
           </FieldGroup>
+
+          {/*
+           * A conciliação é o selo de conferência: enquanto ela vale, valor, conta e tipo
+           * ficam travados. Mostrar de onde ela vem (e o caminho para desfazer) é o que
+           * evita a pessoa achar que o app travou sem motivo.
+           */}
+          {travado && transaction && (
+            <ProvaDaConciliacao transaction={transaction} onDesfeita={() => onOpenChange(false)} />
+          )}
 
           {/* Só na edição: um lançamento que acabou de nascer não tem história para contar */}
           {transaction && <TransactionHistory transactionId={transaction.id} />}

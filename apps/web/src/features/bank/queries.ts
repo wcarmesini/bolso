@@ -4,9 +4,11 @@ import {
   approveBankPending,
   getBank,
   getBankPending,
+  getDismissed,
   linkBankAccounts,
   removeBankConnection,
   syncBankConnection,
+  undismiss,
   updateBankConnection,
 } from './api'
 
@@ -66,5 +68,21 @@ export function useApproveBankPending() {
       void queryClient.invalidateQueries({ queryKey: ['transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['reports'] })
     },
+  })
+}
+
+export function useDismissed(connectionId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: [...chave, 'dismissed', connectionId],
+    queryFn: () => getDismissed(connectionId as string),
+    enabled: enabled && connectionId !== null,
+  })
+}
+
+export function useUndismiss() {
+  const recarregar = useRecarga()
+  return useMutation({
+    mutationFn: ({ id, ids }: { id: string; ids: string[] }) => undismiss(id, ids),
+    onSuccess: recarregar,
   })
 }

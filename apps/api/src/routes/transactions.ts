@@ -7,6 +7,7 @@ import {
   splitInstallments,
   type Transaction,
   type TransactionInput,
+  type TransactionSource,
   type TransactionSplit,
   transactionFormSchema,
   transactionListQuerySchema,
@@ -19,6 +20,7 @@ import { categories, contacts, transactionSplits, transactions, user } from '../
 import { type AppEnv, type Deps, HttpError, notify, onInvalid } from '../http'
 import { diferencas, historicoDe, registrar } from '../lib/audit'
 import { devolverParaFila, tirarDaFila } from '../lib/inbox'
+import { desligarProva, exigirSemProva, provasDe } from '../lib/reconciliation'
 import { accountCycle, cashFields } from '../statements'
 
 type Row = typeof transactions.$inferSelect
@@ -31,6 +33,8 @@ export const toTransaction = (
   createdByName: string,
   /** A outra perna, quando este lançamento faz parte de uma transferência */
   counterpartAccountId: string | null = null,
+  /** As provas da conciliação: os movimentos do banco que confirmam este lançamento */
+  sources: TransactionSource[] = [],
 ): Transaction => ({
   id: row.id,
   type: row.type,
@@ -39,7 +43,7 @@ export const toTransaction = (
   accountId: row.accountId,
   contactId: row.contactId,
   origin: row.origin,
-  externalId: row.externalId,
+  sources,
   purchaseDate: row.purchaseDate,
   paymentDate: row.paymentDate,
   splits,
@@ -161,12 +165,15 @@ export function transactionsRoutes(deps: Deps) {
       }
     }
 
+    const provas = await provasDe(db, rows[0]?.groupId ?? '', ids)
+
     return rows.map((row) =>
       toTransaction(
         row,
         splitsById.get(row.id) ?? [],
         nameById.get(row.createdBy) ?? '',
         outraPonta.get(row.id) ?? null,
+        provas.get(row.id) ?? [],
       ),
     )
   }
@@ -347,6 +354,22 @@ export function transactionsRoutes(deps: Deps) {
           const values = c.req.valid('json')
           const groupId = c.var.groupId
           const current = await findOwn(groupId, c.req.param('id'))
+
+          /*
+           * Valor, conta e tipo são o que identifica o movimento no banco. Mudá-los depois de
+           * conciliar desfaria a prova sem ninguém perceber — o lançamento continuaria
+           * dizendo "conferido" sobre um número que o banco nunca confirmou. O resto
+           * (descrição, categoria, contato, datas) segue livre, que é o que se espera mexer.
+           */
+          const provasAtuais = (await provasDe(db, groupId, [current.id])).get(current.id) ?? []
+          const mexeuNoQueIdentifica =
+            values.amountCents !== current.amountCents ||
+            values.accountId !== current.accountId ||
+            values.type !== current.type
+          if (mexeuNoQueIdentifica) {
+            exigirSemProva(provasAtuais, 'editar o valor, a conta ou o tipo')
+          }
+
           await assertSplitCategories(db, groupId, values)
           await assertContact(db, groupId, values.contactId)
           const cycle = await accountCycle(db, groupId, values.accountId)
@@ -461,26 +484,29 @@ export function transactionsRoutes(deps: Deps) {
                   eq(transactions.installmentGroupId, series),
                 )
 
+        /*
+         * Conciliado não se exclui. O lançamento é a contrapartida de um movimento que o
+         * banco confirmou: apagá-lo assim deixaria a conferência dizendo que bate uma coisa
+         * que não existe mais. Desfazer a conciliação é um passo à parte, e visível.
+         */
+        const alvos = await db
+          .select({ id: transactions.id })
+          .from(transactions)
+          .where(and(alvo, naoExcluido))
+        const provasDosAlvos = await provasDe(
+          db,
+          c.var.groupId,
+          alvos.map((item) => item.id),
+        )
+        for (const item of alvos) {
+          exigirSemProva(provasDosAlvos.get(item.id) ?? [], 'excluir')
+        }
+
         const excluidos = await db
           .update(transactions)
           .set(marcarExcluido)
           .where(and(alvo, naoExcluido))
-          .returning({
-            id: transactions.id,
-            description: transactions.description,
-            externalId: transactions.externalId,
-          })
-
-        /*
-         * Veio do banco: a linha volta para a caixa de entrada. Sem isso o movimento sumiria
-         * do app inteiro — nem lançamento, nem linha esperando —, e o banco não avisaria de
-         * novo, porque para ele aquilo já foi entregue.
-         */
-        await devolverParaFila(
-          db,
-          c.var.groupId,
-          excluidos.flatMap((item) => (item.externalId ? [item.externalId] : [])),
-        )
+          .returning({ id: transactions.id, description: transactions.description })
 
         for (const excluido of excluidos) {
           await registrar(db, {
@@ -546,15 +572,16 @@ export function transactionsRoutes(deps: Deps) {
               isNotNull(transactions.deletedAt),
             ),
           )
-          .returning({
-            id: transactions.id,
-            description: transactions.description,
-            externalId: transactions.externalId,
-          })
+          .returning({ id: transactions.id, description: transactions.description })
         if (!restaurado) throw new HttpError(404, 'Lançamento não encontrado na lixeira.')
 
         // Voltou a existir: a linha do banco sai da fila, para não aparecer a mesma coisa duas vezes
-        await tirarDaFila(db, c.var.groupId, restaurado.externalId ? [restaurado.externalId] : [])
+        const provas = await provasDe(db, c.var.groupId, [restaurado.id])
+        await tirarDaFila(
+          db,
+          c.var.groupId,
+          (provas.get(restaurado.id) ?? []).map((prova) => prova.externalId),
+        )
 
         await registrar(db, {
           groupId: c.var.groupId,
@@ -563,6 +590,32 @@ export function transactionsRoutes(deps: Deps) {
           action: 'restore',
           actorId: c.var.user.id,
           label: restaurado.description,
+        })
+        notify(deps, c, 'transactions', 'bank')
+        return c.body(null, 204)
+      })
+
+      /*
+       * Desfazer a conciliação: o lançamento perde a prova e volta a poder ser editado e
+       * excluído. A linha do banco volta para a caixa de entrada, porque de novo ninguém
+       * respondeu por ela.
+       */
+      .post('/:id/unreconcile', async (c) => {
+        const atual = await findOwn(c.var.groupId, c.req.param('id'))
+        const soltas = await db.transaction(async (tx) =>
+          desligarProva(tx, c.var.groupId, { transactionId: atual.id }),
+        )
+        if (soltas.length === 0) throw new HttpError(409, 'Este lançamento não está conciliado.')
+
+        await devolverParaFila(db, c.var.groupId, soltas)
+        await registrar(db, {
+          groupId: c.var.groupId,
+          entity: 'transaction',
+          entityId: atual.id,
+          action: 'update',
+          actorId: c.var.user.id,
+          label: atual.description,
+          changes: [{ field: 'conciliação', from: 'conciliado', to: 'desfeita' }],
         })
         notify(deps, c, 'transactions', 'bank')
         return c.body(null, 204)

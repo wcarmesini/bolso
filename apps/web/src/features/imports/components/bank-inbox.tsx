@@ -1,6 +1,6 @@
 import { bankStatusLabel, type ImportDecision, isBankReady } from '@bolso/shared'
 import { Link } from '@tanstack/react-router'
-import { Inbox, Landmark, RefreshCw } from 'lucide-react'
+import { EyeOff, Inbox, Landmark, RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/empty-state'
@@ -13,6 +13,7 @@ import {
   useSyncBankConnection,
 } from '@/features/bank/queries'
 import { errorMessage } from '@/lib/errors'
+import { DismissedDialog } from './dismissed-dialog'
 import { ReviewPanel, textosDoBanco } from './review-panel'
 
 /** "1 aprovado", "4 aprovados" — o singular escapa quando a frase é montada por pedaços */
@@ -37,6 +38,7 @@ const quando = (iso: string | null) => {
 export function BankInbox() {
   const { data, isPending: carregandoBanco } = useBank()
   const [conexaoId, setConexaoId] = useState<string | null>(null)
+  const [vendoDispensados, setVendoDispensados] = useState(false)
   const sincronizar = useSyncBankConnection()
   const aprovar = useApproveBankPending()
 
@@ -108,6 +110,12 @@ export function BankInbox() {
 
   return (
     <>
+      <DismissedDialog
+        connectionId={conexaoId}
+        open={vendoDispensados}
+        onOpenChange={setVendoDispensados}
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3">
         {conexoes.length > 1 ? (
           <ToggleGroup
@@ -141,6 +149,15 @@ export function BankInbox() {
               ? bankStatusLabel(conexao.status)
               : quando(conexao?.lastSyncedAt ?? null)}
           </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => setVendoDispensados(true)}
+          >
+            <EyeOff />
+            Dispensados
+          </Button>
           <Button variant="outline" size="sm" onClick={atualizar} disabled={sincronizar.isPending}>
             <RefreshCw className={sincronizar.isPending ? 'animate-spin' : undefined} />
             {sincronizar.isPending ? 'Buscando…' : 'Atualizar agora'}

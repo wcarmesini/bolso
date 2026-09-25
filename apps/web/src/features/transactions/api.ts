@@ -85,3 +85,8 @@ export function listDeletedTransactions() {
 export function restoreTransaction(id: string) {
   return api<void>(`/transactions/${id}/restore`, { method: 'POST' })
 }
+
+/** Desfaz a conciliação: o lançamento volta a poder ser editado e excluído */
+export function unreconcileTransaction(id: string) {
+  return api<void>(`/transactions/${id}/unreconcile`, { method: 'POST' })
+}

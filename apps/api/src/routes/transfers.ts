@@ -6,7 +6,7 @@ import { Hono } from 'hono'
 import { accounts, transactions } from '../db/schema'
 import { type AppEnv, type Deps, HttpError, notFound, notify, onInvalid } from '../http'
 import { registrar } from '../lib/audit'
-import { devolverParaFila } from '../lib/inbox'
+import { exigirSemProva, provasDe } from '../lib/reconciliation'
 import { toTransaction } from './transactions'
 
 /*
@@ -137,6 +137,15 @@ export function transfersRoutes(deps: Deps) {
        * nada sai do banco, restaurar uma das pernas pela lixeira traz a outra junto.
        */
       .delete('/:groupId', async (c) => {
+        // Conciliada com o banco, a transferência não se exclui: desfaz a conciliação antes
+        const pernas = await carregar(c.var.groupId, c.req.param('groupId'))
+        const provas = await provasDe(
+          db,
+          c.var.groupId,
+          pernas.map((perna) => perna.id),
+        )
+        for (const perna of pernas) exigirSemProva(provas.get(perna.id) ?? [], 'excluir')
+
         const deleted = await db
           .update(transactions)
           .set({ deletedAt: new Date(), deletedBy: c.var.user.id, updatedAt: new Date() })
@@ -147,19 +156,8 @@ export function transfersRoutes(deps: Deps) {
               eq(transactions.transferGroupId, c.req.param('groupId')),
             ),
           )
-          .returning({
-            id: transactions.id,
-            description: transactions.description,
-            externalId: transactions.externalId,
-          })
+          .returning({ id: transactions.id, description: transactions.description })
         if (deleted.length === 0) throw notFound('Transferência')
-
-        // A perna que veio do banco devolve a linha dela para a caixa de entrada
-        await devolverParaFila(
-          db,
-          c.var.groupId,
-          deleted.flatMap((perna) => (perna.externalId ? [perna.externalId] : [])),
-        )
 
         for (const perna of deleted) {
           await registrar(db, {

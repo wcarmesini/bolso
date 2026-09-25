@@ -32,11 +32,19 @@ import { formatCents } from '@/lib/money'
 
 type Campo = { control: Control<TransactionFormValues> }
 
+/*
+ * Conciliado, o lançamento não é mais só o que alguém digitou: é o que o banco confirmou.
+ * Valor, conta e tipo são o que identifica aquele movimento, então ficam travados até
+ * alguém desfazer a conciliação — de propósito, num passo visível.
+ */
+type Travavel = Campo & { travado?: boolean }
+
 /** Despesa ou receita. Trocar limpa as categorias: a API recusa categoria do outro tipo. */
 export const TypeField = memo(function TypeField({
   control,
   onTypeChange,
-}: Campo & { onTypeChange: () => void }) {
+  travado,
+}: Travavel & { onTypeChange: () => void }) {
   const { field } = useController({ control, name: 'type' })
   return (
     <Field>
@@ -55,7 +63,7 @@ export const TypeField = memo(function TypeField({
         className="w-full"
       >
         {transactionTypesInOrder.map((value) => (
-          <ToggleGroupItem key={value} value={value} className="flex-1">
+          <ToggleGroupItem key={value} value={value} disabled={travado} className="flex-1">
             {transactionTypeLabels[value]}
           </ToggleGroupItem>
         ))}
@@ -64,14 +72,15 @@ export const TypeField = memo(function TypeField({
   )
 })
 
-export const AmountField = memo(function AmountField({ control }: Campo) {
+export const AmountField = memo(function AmountField({ control, travado }: Travavel) {
   const { field, fieldState } = useController({ control, name: 'amountCents' })
   return (
     <Field data-invalid={Boolean(fieldState.error)}>
       <FieldLabel htmlFor="transaction-amount">Valor</FieldLabel>
       <MoneyInput
         id="transaction-amount"
-        autoFocus
+        autoFocus={!travado}
+        disabled={travado}
         value={field.value}
         onValueChange={field.onChange}
         onBlur={field.onBlur}
@@ -142,7 +151,7 @@ const PaymentDateField = memo(function PaymentDateField({ control }: Campo) {
   )
 })
 
-export const AccountField = memo(function AccountField({ control }: Campo) {
+export const AccountField = memo(function AccountField({ control, travado }: Travavel) {
   const { field, fieldState } = useController({ control, name: 'accountId' })
   return (
     <Field data-invalid={Boolean(fieldState.error)}>
@@ -152,6 +161,7 @@ export const AccountField = memo(function AccountField({ control }: Campo) {
         value={field.value}
         onChange={field.onChange}
         invalid={Boolean(fieldState.error)}
+        disabled={travado}
       />
       <FieldError errors={[fieldState.error]} />
     </Field>

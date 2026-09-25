@@ -57,3 +57,21 @@ export function approveBankPending(id: string, decisions: ImportDecision[]) {
     body: { decisions },
   })
 }
+
+export type DismissedLine = {
+  id: string
+  date: string
+  amountCents: number
+  description: string
+  kind: string | null
+  dismissedAt: string
+}
+
+/** O que foi dispensado nesta conexão — dá para rever e trazer de volta */
+export function getDismissed(id: string) {
+  return api<DismissedLine[]>(`/bank/connections/${id}/dismissed`)
+}
+
+export function undismiss(id: string, ids: string[]) {
+  return api<void>(`/bank/connections/${id}/undismiss`, { method: 'POST', body: { ids } })
+}

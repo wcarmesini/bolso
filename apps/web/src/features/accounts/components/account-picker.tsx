@@ -21,6 +21,8 @@ type AccountPickerProps = {
   id?: string
   label?: string
   invalid?: boolean
+  /** Travado: o lançamento está conciliado, e a conta é o que identifica o movimento */
+  disabled?: boolean
 }
 
 /**
@@ -28,7 +30,14 @@ type AccountPickerProps = {
  * como conta comum, que é o caso da maioria; cartão pede fechamento e vencimento, e esses
  * ficam em Ajustes → Contas.
  */
-function AccountPickerBase({ value, onChange, id, label = 'Conta', invalid }: AccountPickerProps) {
+function AccountPickerBase({
+  value,
+  onChange,
+  id,
+  label = 'Conta',
+  invalid,
+  disabled,
+}: AccountPickerProps) {
   const { data: accounts = [] } = useAccounts()
   const saveAccount = useSaveAccount()
   const [open, setOpen] = useState(false)
@@ -83,6 +92,7 @@ function AccountPickerBase({ value, onChange, id, label = 'Conta', invalid }: Ac
         id={id}
         aria-label={`${label}: ${selected?.name ?? 'sem conta'}`}
         aria-invalid={invalid}
+        disabled={disabled}
         render={
           <Button
             variant="outline"

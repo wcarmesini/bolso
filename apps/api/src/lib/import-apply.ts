@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import type { CardCycle, TransactionOrigin } from '@bolso/shared'
+import type { CardCycle, ReconciliationSource, TransactionOrigin } from '@bolso/shared'
 import { and, eq, isNotNull, isNull } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import { accounts, transactionSplits, transactions } from '../db/schema'
 import { HttpError } from '../http'
 import { cashFields } from '../statements'
 import { tipoDe } from './reconcile'
+import { ligarProva } from './reconciliation'
 
 /*
  * O que acontece quando a pessoa aprova uma linha vinda de fora — do extrato ou do banco
@@ -20,6 +21,8 @@ type Contexto = {
   userId: string
   cycle: CardCycle | null
   origin: TransactionOrigin
+  /** De onde vem a prova: Open Finance ou extrato */
+  source: ReconciliationSource
 }
 
 type Linha = {
@@ -67,11 +70,18 @@ export async function criarLancamento(
       installmentNumber: parcela?.number ?? null,
       installmentCount: parcela?.count ?? null,
       origin: contexto.origin,
-      externalId: linha.externalId,
       createdBy: contexto.userId,
     })
     .returning()
   if (!created) throw new HttpError(500, 'Não foi possível importar o lançamento.')
+  await ligarProva(tx, {
+    groupId: contexto.groupId,
+    transactionId: created.id,
+    source: contexto.source,
+    externalId: linha.externalId,
+    label: linha.description,
+    userId: contexto.userId,
+  })
   await tx.insert(transactionSplits).values({
     groupId: contexto.groupId,
     transactionId: created.id,
@@ -121,48 +131,71 @@ export async function criarTransferencia(
     createdBy: contexto.userId,
   }
 
-  await tx.insert(transactions).values([
-    {
-      ...comum,
-      type: saiuDaqui ? ('expense' as const) : ('income' as const),
-      accountId: contexto.accountId,
+  const pernas = await tx
+    .insert(transactions)
+    .values([
+      {
+        ...comum,
+        type: saiuDaqui ? ('expense' as const) : ('income' as const),
+        accountId: contexto.accountId,
+      },
+      {
+        ...comum,
+        type: saiuDaqui ? ('income' as const) : ('expense' as const),
+        accountId: counterAccountId,
+      },
+    ])
+    .returning({ id: transactions.id, accountId: transactions.accountId })
+
+  // Só a perna desta conta é o movimento que o banco mandou; a outra é o outro lado
+  const daConta = pernas.find((perna) => perna.accountId === contexto.accountId)
+  if (daConta) {
+    await ligarProva(tx, {
+      groupId: contexto.groupId,
+      transactionId: daConta.id,
+      source: contexto.source,
       externalId: linha.externalId,
-    },
-    {
-      ...comum,
-      type: saiuDaqui ? ('income' as const) : ('expense' as const),
-      accountId: counterAccountId,
-      externalId: null,
-    },
-  ])
+      label: linha.description,
+      userId: contexto.userId,
+    })
+  }
   return transferGroupId
 }
 
 /**
- * Gruda a linha num lançamento que já existia. O `isNull(externalId)` é a trava: se alguém
- * do grupo conciliou esse mesmo lançamento primeiro, a atualização não pega ninguém e a
- * pessoa recebe o aviso em vez de criar uma ligação dupla.
+ * Gruda a linha num lançamento que já existia. A trava é o índice único da prova: se alguém
+ * do grupo conciliou esse mesmo movimento primeiro, a inserção não passa e a pessoa recebe o
+ * aviso — em vez de o mesmo movimento do banco acabar ligado a dois lançamentos.
  */
 export async function ligarExistente(
   tx: Tx,
-  contexto: Pick<Contexto, 'groupId' | 'accountId'>,
+  contexto: Pick<Contexto, 'groupId' | 'accountId' | 'userId' | 'source'>,
   transactionId: string,
   externalId: string,
+  label = '',
 ) {
-  const [linked] = await tx
-    .update(transactions)
-    .set({ externalId, updatedAt: new Date() })
+  const [existe] = await tx
+    .select({ id: transactions.id, description: transactions.description })
+    .from(transactions)
     .where(
       and(
         eq(transactions.id, transactionId),
         eq(transactions.groupId, contexto.groupId),
         isNull(transactions.deletedAt),
         eq(transactions.accountId, contexto.accountId),
-        isNull(transactions.externalId),
       ),
     )
-    .returning({ id: transactions.id })
-  if (!linked) throw new HttpError(409, 'Esse lançamento já foi conciliado com outra linha.')
+    .limit(1)
+  if (!existe) throw new HttpError(404, 'Lançamento não encontrado.')
+
+  await ligarProva(tx, {
+    groupId: contexto.groupId,
+    transactionId,
+    source: contexto.source,
+    externalId,
+    label: label || existe.description,
+    userId: contexto.userId,
+  })
 }
 
 /**
@@ -196,7 +229,7 @@ export function agruparConciliacoes(
  */
 export async function conciliarDividindo(
   tx: Tx,
-  contexto: Pick<Contexto, 'groupId' | 'accountId'>,
+  contexto: Pick<Contexto, 'groupId' | 'accountId' | 'userId' | 'source'>,
   transactionId: string,
   linhas: Linha[],
 ) {
@@ -208,11 +241,11 @@ export async function conciliarDividindo(
         eq(transactions.id, transactionId),
         eq(transactions.groupId, contexto.groupId),
         eq(transactions.accountId, contexto.accountId),
-        isNull(transactions.externalId),
+        isNull(transactions.deletedAt),
       ),
     )
     .limit(1)
-  if (!original) throw new HttpError(409, 'Esse lançamento já foi conciliado com outra linha.')
+  if (!original) throw new HttpError(404, 'Lançamento não encontrado.')
 
   const soma = linhas.reduce((total, linha) => total + Math.abs(linha.amountCents), 0)
   if (soma !== original.amountCents) {
@@ -243,12 +276,16 @@ export async function conciliarDividindo(
   // A primeira parte continua sendo o lançamento de sempre, só que menor
   await tx
     .update(transactions)
-    .set({
-      amountCents: Math.abs(primeira.amountCents),
-      externalId: primeira.externalId,
-      updatedAt: new Date(),
-    })
+    .set({ amountCents: Math.abs(primeira.amountCents), updatedAt: new Date() })
     .where(eq(transactions.id, original.id))
+  await ligarProva(tx, {
+    groupId: contexto.groupId,
+    transactionId: original.id,
+    source: contexto.source,
+    externalId: primeira.externalId,
+    label: primeira.description,
+    userId: contexto.userId,
+  })
   await tx
     .update(transactionSplits)
     .set({ amountCents: Math.abs(primeira.amountCents) })
@@ -274,11 +311,18 @@ export async function conciliarDividindo(
         paymentDate: original.paymentDate,
         statementMonth: original.statementMonth,
         origin: original.origin,
-        externalId: linha.externalId,
         createdBy: original.createdBy,
       })
       .returning({ id: transactions.id })
     if (!parte) throw new HttpError(500, 'Não foi possível dividir o lançamento.')
+    await ligarProva(tx, {
+      groupId: contexto.groupId,
+      transactionId: parte.id,
+      source: contexto.source,
+      externalId: linha.externalId,
+      label: linha.description,
+      userId: contexto.userId,
+    })
     await tx.insert(transactionSplits).values({
       groupId: original.groupId,
       transactionId: parte.id,

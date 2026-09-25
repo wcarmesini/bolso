@@ -11,6 +11,7 @@ import {
   user,
 } from '../db/schema'
 import { HttpError, notFound } from '../http'
+import { desligarProva } from './reconciliation'
 
 /*
  * Histórico de importações, e o caminho de volta.
@@ -173,18 +174,13 @@ export async function desfazerLote(
         const soltas = await tx
           .update(transactions)
           .set({
-            externalId: null,
             ...(item.previousAmountCents ? { amountCents: item.previousAmountCents } : {}),
             updatedAt: new Date(),
           })
-          .where(
-            and(
-              eq(transactions.id, item.transactionId),
-              eq(transactions.groupId, groupId),
-              eq(transactions.externalId, item.externalId),
-            ),
-          )
+          .where(and(eq(transactions.id, item.transactionId), eq(transactions.groupId, groupId)))
           .returning({ id: transactions.id })
+        // A prova sai junto: o lançamento volta a não ter conferência do banco
+        await desligarProva(tx, groupId, { transactionId: item.transactionId })
         if (soltas.length === 0) resultado.missing += 1
         else {
           resultado.unlinked += 1

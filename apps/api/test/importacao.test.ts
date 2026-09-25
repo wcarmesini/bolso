@@ -226,7 +226,7 @@ describe('importar e conciliar', () => {
       type: 'expense',
       amountCents: 4590,
       origin: 'ofx',
-      externalId: 'N1',
+      sources: [{ source: 'ofx', externalId: 'N1' }],
       accountId: conta.id,
       paymentDate: '2026-09-03',
     })
@@ -379,7 +379,7 @@ describe('importar e conciliar', () => {
     const lista = await ana.json<Transaction[]>('/api/transactions?month=2026-09')
     const conciliado = lista.body.filter((item) => item.description === 'Feira da semana')
     expect(conciliado.length).toBe(1)
-    expect(conciliado[0]?.externalId).toBe('C1')
+    expect(conciliado[0]?.sources).toMatchObject([{ source: 'ofx', externalId: 'C1' }])
     expect(conciliado[0]?.origin).toBe('manual')
 
     // E o arquivo relido já não sugere nada
@@ -404,7 +404,9 @@ describe('importar e conciliar', () => {
   it('recusa conciliar com um lançamento que já tem dono', async () => {
     const arquivo = extrato(lancamentoOfx('C2', '20260914', '-250.00', 'OUTRA VEZ'))
     const lista = await ana.json<Transaction[]>('/api/transactions?month=2026-09')
-    const jaConciliado = lista.body.find((item) => item.externalId === 'C1')
+    const jaConciliado = lista.body.find((item) =>
+      item.sources.some((prova) => prova.externalId === 'C1'),
+    )
     const resposta = await confirmar(arquivo, [
       { fitId: 'C2', action: 'link', transactionId: jaConciliado?.id },
     ])

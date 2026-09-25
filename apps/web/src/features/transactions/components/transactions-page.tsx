@@ -1,4 +1,4 @@
-import { cardCycleOf, statementFor, type Transaction } from '@bolso/shared'
+import { cardCycleOf, reconciliationLabel, statementFor, type Transaction } from '@bolso/shared'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowDownLeft,
@@ -408,12 +408,14 @@ function TransactionRow({
           : transaction.paymentDate
             ? undefined
             : 'a pagar',
-        // De onde veio: importado do extrato, ou digitado e depois casado com ele
-        transaction.origin === 'ofx'
-          ? 'do extrato'
-          : transaction.externalId
-            ? 'conciliado'
-            : undefined,
+        /*
+         * A conciliação é o selo de conferência do lançamento: ela diz que aquele número não
+         * é só o que alguém digitou, é o que o banco confirmou. Por isso aparece com a
+         * origem — e com as duas, quando o mesmo movimento chegou pelos dois caminhos.
+         */
+        transaction.sources.length > 0
+          ? `conciliado · ${reconciliationLabel(transaction.sources)}`
+          : undefined,
       ].filter(Boolean)
 
   return (

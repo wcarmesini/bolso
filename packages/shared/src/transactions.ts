@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { reportBases } from './basis'
+import { reconciliationSources } from './reconciliation'
 import { transferInfoSchema } from './transfers'
 
 export const transactionTypes = ['expense', 'income'] as const
@@ -89,12 +90,24 @@ export type TransactionInput = z.output<typeof transactionFormSchema>
 export const transactionOrigins = ['manual', 'ofx', 'bank'] as const
 export type TransactionOrigin = (typeof transactionOrigins)[number]
 
+const transactionSourceSchema = z.object({
+  id: z.string(),
+  source: z.enum(reconciliationSources),
+  externalId: z.string(),
+  label: z.string(),
+  createdAt: z.string(),
+})
+
 export const transactionSchema = transactionFields.omit({ installments: true }).extend({
   id: z.string(),
   /** De onde veio: digitado no app, lido de um extrato ou trazido do banco conectado */
   origin: z.enum(transactionOrigins),
-  /** Identificador do lançamento no extrato do banco (FITID), quando veio de importação */
-  externalId: z.string().nullable(),
+  /*
+   * As provas da conciliação: os movimentos do banco que correspondem a este lançamento.
+   * Vazio = ninguém conferiu ainda. Mais de um = o mesmo movimento chegou por dois caminhos
+   * (extrato e Open Finance), e os dois confirmam.
+   */
+  sources: z.array(transactionSourceSchema),
   // Fatura em que caiu (mês do vencimento), só para cartão de crédito
   statementMonth: z.string().nullable(),
   /** Preenchido quando o lançamento é uma das pernas de uma transferência entre contas */

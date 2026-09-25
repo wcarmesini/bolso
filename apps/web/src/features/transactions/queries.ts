@@ -10,6 +10,7 @@ import {
   restoreTransaction,
   type TransactionSlice,
   type TransactionView,
+  unreconcileTransaction,
   updateTransaction,
 } from './api'
 
@@ -84,4 +85,17 @@ export function useDeletedTransactions(enabled: boolean) {
 export function useRestoreTransaction() {
   const invalidate = useInvalidateMoney()
   return useMutation({ mutationFn: restoreTransaction, onSuccess: invalidate })
+}
+
+export function useUnreconcile() {
+  const invalidate = useInvalidateMoney()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: unreconcileTransaction,
+    onSuccess: () => {
+      invalidate()
+      // A linha volta para a caixa de entrada do banco
+      void queryClient.invalidateQueries({ queryKey: ['bank'] })
+    },
+  })
 }

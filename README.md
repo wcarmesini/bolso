@@ -145,6 +145,7 @@ Tudo em **PostgreSQL**, com **Drizzle** para o SQL tipado e as migrations.
 | `bank_connections` | Uma conta do banco ligada a uma conta do Bolso (Pluggy). Guarda o `item_id`, o estado da conexão, a **data a partir da qual buscar** e a última busca |
 | `pending_transactions` | **A caixa de entrada:** o que o banco mandou e ainda não virou lançamento. Aprovado ou dispensado, a linha fica marcada — é o que impede a busca seguinte de trazer tudo de novo |
 | `import_batches` · `import_batch_items` | Cada confirmação e o que ela fez, linha por linha. É o que permite **desfazer** uma leva inteira em vez de apagar lançamento por lançamento |
+| `transaction_sources` | **A conciliação:** a ligação entre um lançamento e o movimento que o banco confirmou. Tabela à parte, e não um campo, porque o mesmo movimento pode chegar pelo extrato **e** pelo Open Finance — com um campo só, a segunda origem viraria um lançamento repetido |
 | `audit_log` | O rastro: quem fez o quê, em que coisa, e **o que mudou** (campo, de, para). É daqui que sai "você criou, a Débora trocou a descrição na terça" |
 | `transactions` | Valor, tipo, conta, contato, **data da compra**, **data do pagamento** e quem lançou. `origin` diz se foi digitado ou importado, e `external_id` guarda o identificador do banco (FITID). No cartão, `statement_month` (a fatura, pelo mês do vencimento). Parcelas: `installment_group_id`, `installment_number` e `installment_count` ("3 de 10"). `transfer_group_id` liga as duas pernas de uma transferência entre contas |
 | `contacts` | Quem recebe ou paga (mercado, escola, cliente), com tipo, documento e observação |
@@ -769,3 +770,35 @@ O saldo anda pela data em que o dinheiro se move, e aqui a **transferência cont
 R$ 1.000 da conta para a poupança não muda o patrimônio, mas muda o saldo das duas — e é
 exatamente isso que esta tela mostra. O cartão não tem saldo inicial: fica negativo conforme
 se compra e volta a zero quando a fatura é paga, por isso aparece do lado do que se deve.
+
+---
+
+## A conciliação, e por que ela trava o lançamento
+
+Conciliar é dizer que **este** lançamento é **aquele** movimento do banco. É o mecanismo de
+conferência do Bolso: quando vale, o número deixa de ser o que alguém digitou e passa a ser o
+que o banco confirma. Por isso ela é guardada como uma **prova**, e não como um campo solto.
+
+**De onde vem aparece na tela.** O lançamento mostra "conciliado · Open Finance", "conciliado ·
+extrato OFX", ou os dois quando o mesmo movimento chegou pelos dois caminhos — e aí são duas
+confirmações independentes do mesmo número. Um lançamento já conferido pelo extrato continua
+disponível para conciliar com o Open Finance: é o mesmo movimento, e as duas provas somam. O
+que não se repete é a mesma origem duas vezes, nem o mesmo movimento em dois lançamentos — o
+índice único `(grupo, origem, identificador)` garante isso no banco de dados, mesmo com duas
+pessoas clicando ao mesmo tempo.
+
+**As travas.** Enquanto a conciliação vale:
+
+- **valor, conta e tipo não se editam** — são o que identifica o movimento, e mudá-los desfaria
+  a prova sem ninguém perceber: o lançamento continuaria dizendo "conferido" sobre um número
+  que o banco nunca confirmou;
+- **o lançamento não se exclui** — nem a transferência conciliada;
+- o resto segue livre: descrição, categoria, contato, observação e datas. Melhorar a descrição
+  de um lançamento conferido é justamente o que se espera que as pessoas façam.
+
+**Desfazer é um passo à parte**, dentro do próprio lançamento, com confirmação. Ao desfazer, a
+linha volta para a caixa de entrada — porque de novo ninguém respondeu por ela.
+
+**Nada do que o banco mandou se perde.** O que foi **dispensado** fica guardado e aparece em
+"Dispensados", na caixa de entrada: dá para rever meses depois, ou trazer de volta para a fila
+quando alguém dispensou por engano.

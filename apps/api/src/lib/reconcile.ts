@@ -1,7 +1,7 @@
-import type { ImportMatch, ImportRow } from '@bolso/shared'
+import type { ImportMatch, ImportRow, ReconciliationSource } from '@bolso/shared'
 import { and, eq, gte, inArray, isNull, lte } from 'drizzle-orm'
 import type { Database } from '../db/client'
-import { categories, transactionSplits, transactions } from '../db/schema'
+import { categories, transactionSources, transactionSplits, transactions } from '../db/schema'
 
 /*
  * Conciliar é dizer "este lançamento do banco é aquele que eu já tinha lançado". Ao ligar os
@@ -76,6 +76,11 @@ export type Existente = {
   purchaseDate: string
   amountCents: number
   type: 'expense' | 'income'
+  /*
+   * A prova que este lançamento já carrega **desta origem**, se houver. Conciliado com o
+   * Open Finance, ele continua livre para conciliar com o extrato: é o mesmo movimento
+   * chegando por dois caminhos, e as duas confirmações valem.
+   */
   externalId: string | null
 }
 
@@ -85,30 +90,44 @@ export async function carregarExistentes(
   groupId: string,
   accountId: string,
   linhas: { date: string }[],
+  source: ReconciliationSource,
 ): Promise<Existente[]> {
   const datas = linhas.map((item) => item.date).sort()
   const primeira = datas[0] ?? '1970-01-01'
   const ultima = datas.at(-1) ?? '2999-12-31'
-  return db
-    .select({
-      id: transactions.id,
-      description: transactions.description,
-      purchaseDate: transactions.purchaseDate,
-      amountCents: transactions.amountCents,
-      type: transactions.type,
-      externalId: transactions.externalId,
-    })
-    .from(transactions)
-    .where(
-      and(
-        eq(transactions.groupId, groupId),
-        // Excluído não aparece como candidato a par nem como "sem par no extrato"
-        isNull(transactions.deletedAt),
-        eq(transactions.accountId, accountId),
-        gte(transactions.purchaseDate, dias(primeira, -DIAS_DE_TOLERANCIA)),
-        lte(transactions.purchaseDate, dias(ultima, DIAS_DE_TOLERANCIA)),
-      ),
-    )
+  return (
+    db
+      .select({
+        id: transactions.id,
+        description: transactions.description,
+        purchaseDate: transactions.purchaseDate,
+        amountCents: transactions.amountCents,
+        type: transactions.type,
+        externalId: transactionSources.externalId,
+      })
+      .from(transactions)
+      /*
+       * A prova entra por fora e só a desta origem: um lançamento já conferido pelo extrato
+       * continua disponível para conciliar com o Open Finance, e vice-versa.
+       */
+      .leftJoin(
+        transactionSources,
+        and(
+          eq(transactionSources.transactionId, transactions.id),
+          eq(transactionSources.source, source),
+        ),
+      )
+      .where(
+        and(
+          eq(transactions.groupId, groupId),
+          // Excluído não aparece como candidato a par nem como "sem par no extrato"
+          isNull(transactions.deletedAt),
+          eq(transactions.accountId, accountId),
+          gte(transactions.purchaseDate, dias(primeira, -DIAS_DE_TOLERANCIA)),
+          lte(transactions.purchaseDate, dias(ultima, DIAS_DE_TOLERANCIA)),
+        ),
+      )
+  )
 }
 
 /** Nome da categoria de cada lançamento, para a tela mostrar o que está conciliando */

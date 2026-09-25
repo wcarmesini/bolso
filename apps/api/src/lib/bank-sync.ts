@@ -1,11 +1,12 @@
 import { isBankReady } from '@bolso/shared'
-import { and, eq, gte, inArray, isNull } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { Database } from '../db/client'
-import { bankConnections, integrationKeys, pendingTransactions, transactions } from '../db/schema'
+import { bankConnections, integrationKeys, pendingTransactions } from '../db/schema'
 import type { Deps } from '../http'
 import { HttpError } from '../http'
 import { decryptSecret } from './crypto'
 import { buscarItem, buscarLancamentos } from './pluggy'
+import { jaConciliados } from './reconciliation'
 
 /*
  * Buscar no banco o que ainda não está no Bolso.
@@ -101,22 +102,13 @@ export async function sincronizar(
 
   if (lancamentos.length > 0) {
     // Já virou lançamento numa aprovação anterior: não volta para a caixa de entrada
-    const jaLancados = await db
-      .select({ externalId: transactions.externalId })
-      .from(transactions)
-      .where(
-        and(
-          eq(transactions.groupId, conexao.groupId),
-          // Um lançamento excluído não conta como "já entrou": a linha pode voltar para a fila
-          isNull(transactions.deletedAt),
-          gte(transactions.purchaseDate, desde),
-          inArray(
-            transactions.externalId,
-            lancamentos.map((item) => item.externalId),
-          ),
-        ),
-      )
-    const conhecidos = new Set(jaLancados.map((row) => row.externalId))
+    // Já conciliado com algum lançamento: não volta para a fila
+    const conhecidos = await jaConciliados(
+      db,
+      conexao.groupId,
+      'pluggy',
+      lancamentos.map((item) => item.externalId),
+    )
     const novos = lancamentos.filter((item) => !conhecidos.has(item.externalId))
 
     if (novos.length > 0) {

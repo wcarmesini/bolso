@@ -332,6 +332,39 @@ export const auditLog = pgTable(
   ],
 )
 
+/*
+ * A conciliação: a ligação entre um lançamento do Bolso e o movimento que o banco mandou.
+ *
+ * É uma tabela à parte, e não um campo, porque a mesma compra pode chegar por mais de um
+ * caminho — o extrato OFX e o Open Finance dão identificadores diferentes para o mesmo
+ * movimento. Com um campo só, a segunda origem apareceria como "nova" e viraria um
+ * lançamento repetido; aqui ela se junta à primeira, e o lançamento passa a ter duas provas.
+ *
+ * O índice único é a trava de verdade: um movimento do banco pertence a um lançamento só.
+ */
+export const transactionSources = pgTable(
+  'transaction_sources',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    groupId: groupId(),
+    transactionId: uuid('transaction_id')
+      .notNull()
+      .references(() => transactions.id, { onDelete: 'cascade' }),
+    /** pluggy | ofx */
+    source: text('source').notNull(),
+    /** O identificador do movimento lá no banco */
+    externalId: text('external_id').notNull(),
+    /** O que o banco chamava aquilo, para a tela contar de onde veio */
+    label: text('label').notNull().default(''),
+    reconciledBy: text('reconciled_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('transaction_sources_transaction_idx').on(table.transactionId),
+    uniqueIndex('transaction_sources_unique').on(table.groupId, table.source, table.externalId),
+  ],
+)
+
 /** Quem recebe ou paga: o mercado, o senhorio, o cliente */
 export const contacts = pgTable(
   'contacts',
@@ -375,7 +408,6 @@ export const transactions = pgTable(
      * compartilham este id. Quem tem isso preenchido fica fora de orçamento e relatórios.
      */
     transferGroupId: uuid('transfer_group_id'),
-    externalId: text('external_id'),
     createdBy: text('created_by')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
@@ -389,10 +421,6 @@ export const transactions = pgTable(
   },
   (table) => [
     index('transactions_group_date_idx').on(table.groupId, table.purchaseDate),
-    // O mesmo lançamento do banco não entra duas vezes, mesmo importando o arquivo de novo
-    uniqueIndex('transactions_external_unique')
-      .on(table.groupId, table.accountId, table.externalId)
-      .where(sql`${table.externalId} is not null and ${table.deletedAt} is null`),
     index('transactions_statement_idx').on(table.accountId, table.statementMonth),
     index('transactions_installment_idx').on(table.installmentGroupId),
     index('transactions_transfer_idx').on(table.transferGroupId),

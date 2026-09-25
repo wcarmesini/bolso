@@ -76,6 +76,7 @@ export function importsRoutes(deps: Deps) {
           c.var.groupId,
           accountId,
           statement.transactions,
+          'ofx',
         )
         const nomes = await categoriasDe(
           db,
@@ -124,6 +125,7 @@ export function importsRoutes(deps: Deps) {
           userId: c.var.user.id,
           cycle,
           origin: 'ofx' as const,
+          source: 'ofx' as const,
         }
 
         const result: ImportResult = { created: 0, linked: 0, transferred: 0, skipped: 0 }

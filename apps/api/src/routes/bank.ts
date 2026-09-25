@@ -250,7 +250,13 @@ export function bankRoutes(deps: Deps) {
               ? { number: row.installmentNumber, count: row.installmentCount }
               : null,
         }))
-        const existentes = await carregarExistentes(db, groupId, conexao.accountId, linhas)
+        const existentes = await carregarExistentes(
+          db,
+          groupId,
+          conexao.accountId,
+          linhas,
+          'pluggy',
+        )
         const nomes = await categoriasDe(
           db,
           existentes.map((row) => row.id),
@@ -279,6 +285,57 @@ export function bankRoutes(deps: Deps) {
           },
         }
         return c.json(preview)
+      })
+
+      /*
+       * Os dispensados. Dispensar resolve a linha, mas não a apaga: às vezes se dispensa por
+       * engano, e às vezes vale rever meses depois. Trazer de volta devolve a linha à fila,
+       * exatamente como ela chegou do banco.
+       */
+      .get('/connections/:id/dismissed', async (c) => {
+        const conexao = await daConexao(c.var.groupId, c.req.param('id'))
+        const rows = await db
+          .select()
+          .from(pendingTransactions)
+          .where(
+            and(
+              eq(pendingTransactions.connectionId, conexao.id),
+              eq(pendingTransactions.status, 'dismissed'),
+            ),
+          )
+          .orderBy(desc(pendingTransactions.date))
+          .limit(200)
+
+        return c.json(
+          rows.map((row) => ({
+            id: row.id,
+            date: row.date,
+            amountCents: row.amountCents,
+            description: row.description,
+            kind: row.kind,
+            dismissedAt: row.updatedAt.toISOString(),
+          })),
+        )
+      })
+
+      .post('/connections/:id/undismiss', async (c) => {
+        const conexao = await daConexao(c.var.groupId, c.req.param('id'))
+        const { ids } = await c.req.json<{ ids: string[] }>()
+        if (!Array.isArray(ids) || ids.length === 0) {
+          throw new HttpError(400, 'Informe o que trazer de volta.')
+        }
+        await db
+          .update(pendingTransactions)
+          .set({ status: 'pending', updatedAt: new Date() })
+          .where(
+            and(
+              eq(pendingTransactions.connectionId, conexao.id),
+              eq(pendingTransactions.status, 'dismissed'),
+              inArray(pendingTransactions.id, ids),
+            ),
+          )
+        notify(deps, c, 'bank')
+        return c.body(null, 204)
       })
 
       // Aprovar: cada linha vira lançamento, gruda num que já existia, ou é dispensada
@@ -316,6 +373,7 @@ export function bankRoutes(deps: Deps) {
             userId: c.var.user.id,
             cycle,
             origin: 'bank' as const,
+            source: 'pluggy' as const,
           }
           const result: ImportResult = { created: 0, linked: 0, transferred: 0, skipped: 0 }
           const itens: ItemDoLote[] = []

@@ -160,7 +160,7 @@ describe('caixa de entrada do banco', () => {
     )
     const criado = lancamentos.body.find((item) => item.description === 'FARMACIA')
     expect(criado?.origin).toBe('bank')
-    expect(criado?.externalId).toBe('p2')
+    expect(criado?.sources).toMatchObject([{ source: 'pluggy', externalId: 'p2' }])
   })
 
   it('dispensar tira da fila sem virar lançamento', async () => {
@@ -237,8 +237,8 @@ describe('caixa de entrada do banco', () => {
     expect(saida?.splits).toEqual([])
 
     // Só a perna desta conta carrega o identificador do banco, para não repetir na busca
-    expect(saida?.externalId).toBe('p4')
-    expect(entrada?.externalId).toBeNull()
+    expect(saida?.sources).toMatchObject([{ source: 'pluggy', externalId: 'p4' }])
+    expect(entrada?.sources).toEqual([])
   })
 
   it('sem chave do Pluggy, não dá para conectar um banco', async () => {
@@ -430,7 +430,7 @@ describe('parcela que vem do banco', () => {
 })
 
 describe('apagar um lançamento que veio do banco', () => {
-  it('a linha do banco volta a esperar aprovação', async () => {
+  it('não deixa excluir conciliado; desfazendo, a linha volta a esperar aprovação', async () => {
     const linha = await esperando('vol-1', '2026-09-28', -4500, 'VOLTOU LTDA')
     const fila = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
     const alvo = fila.body.rows.find((row) => row.fitId === linha?.id)
@@ -446,7 +446,22 @@ describe('apagar um lançamento que veio do banco', () => {
       '/api/transactions?from=2026-09-01&to=2026-09-30',
     )
     const criado = lancamentos.body.find((item) => item.description === 'VOLTOU LTDA')
-    await ana.request(`/api/transactions/${criado?.id}`, { method: 'DELETE' })
+    expect(criado?.sources).toMatchObject([{ source: 'pluggy' }])
+
+    // Conciliado não se exclui: a conferência do banco vale mais que a vontade do clique
+    const barrado = await ana.json<{ error: string }>(`/api/transactions/${criado?.id}`, {
+      method: 'DELETE',
+    })
+    expect(barrado.status).toBe(409)
+    expect(barrado.body.error).toContain('conciliado')
+
+    // Desfazendo a conciliação, a linha volta para a fila e o lançamento fica livre
+    const desfez = await ana.request(`/api/transactions/${criado?.id}/unreconcile`, {
+      method: 'POST',
+    })
+    expect(desfez.status).toBe(204)
+    const apagou = await ana.request(`/api/transactions/${criado?.id}`, { method: 'DELETE' })
+    expect(apagou.status).toBe(204)
 
     const depois = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
     const devolvida = depois.body.rows.find((row) => row.description === 'VOLTOU LTDA')
@@ -525,7 +540,7 @@ describe('histórico de importações', () => {
     )
     expect(lancamentos.body.some((item) => item.description === 'PADARIA')).toBe(false)
     const almoco = lancamentos.body.find((item) => item.id === jaLancado.body.id)
-    expect(almoco?.externalId).toBeNull()
+    expect(almoco?.sources).toEqual([])
 
     // As três linhas voltaram a esperar aprovação, inclusive a que tinha sido dispensada
     const depois = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
@@ -580,7 +595,10 @@ describe('uma compra, duas saídas no banco', () => {
     const partes = lancamentos.body.filter((item) => item.description === 'Carne do churrasco')
     expect(partes.map((item) => item.amountCents).sort((a, b) => a - b)).toEqual([3000, 5000])
     expect(partes.every((item) => item.splits[0]?.categoryId === mercado)).toBe(true)
-    expect(partes.map((item) => item.externalId).sort()).toEqual(['d1', 'd2'])
+    expect(partes.flatMap((item) => item.sources.map((p) => p.externalId)).sort()).toEqual([
+      'd1',
+      'd2',
+    ])
     // A soma continua sendo a compra inteira
     expect(partes.reduce((total, item) => total + item.amountCents, 0)).toBe(8000)
 
@@ -597,7 +615,7 @@ describe('uma compra, duas saídas no banco', () => {
     expect(voltou).toHaveLength(1)
     expect(voltou[0]?.amountCents).toBe(8000)
     expect(voltou[0]?.splits[0]?.amountCents).toBe(8000)
-    expect(voltou[0]?.externalId).toBeNull()
+    expect(voltou[0]?.sources).toEqual([])
   })
 
   it('recusa quando as partes não somam o valor do lançamento', async () => {
