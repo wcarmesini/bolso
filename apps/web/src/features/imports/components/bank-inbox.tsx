@@ -134,7 +134,8 @@ export function BankInbox() {
         onOpenChange={setVendoDispensados}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3">
+      {/* Uma linha, como no extrato: a conferência é que tem de ocupar a tela */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         {conexoes.length > 1 ? (
           <ToggleGroup
             variant="outline"
@@ -161,8 +162,8 @@ export function BankInbox() {
           </p>
         )}
 
-        <div className="flex items-center gap-3">
-          <p className="text-muted-foreground text-xs">
+        <div className="flex items-center gap-1">
+          <p className="mr-2 text-muted-foreground text-xs">
             {conexao && !isBankReady(conexao.status)
               ? bankStatusLabel(conexao.status)
               : quando(conexao?.lastSyncedAt ?? null)}
@@ -176,7 +177,13 @@ export function BankInbox() {
             <EyeOff />
             Dispensados
           </Button>
-          <Button variant="outline" size="sm" onClick={atualizar} disabled={sincronizar.isPending}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={atualizar}
+            disabled={sincronizar.isPending}
+          >
             <RefreshCw className={sincronizar.isPending ? 'animate-spin' : undefined} />
             {sincronizar.isPending ? 'Buscando…' : 'Atualizar agora'}
           </Button>

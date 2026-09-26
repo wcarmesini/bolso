@@ -30,6 +30,8 @@ type CategoryPickerProps = {
   id?: string
   label?: string
   invalid?: boolean
+  /** O que aparece quando nada está escolhido ("Sem categoria", no lançamento) */
+  vazio?: string
 }
 
 /**
@@ -46,6 +48,7 @@ function CategoryPickerBase({
   id,
   label = 'Categoria',
   invalid,
+  vazio = 'Sem categoria',
 }: CategoryPickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -139,7 +142,7 @@ function CategoryPickerBase({
         id={id}
         // O rótulo leva junto o que está escolhido: o aria-label substitui o texto visível,
         // então sem isso um leitor de tela nunca diria qual categoria está selecionada
-        aria-label={`${label}: ${selected?.label ?? 'Sem categoria'}`}
+        aria-label={`${label}: ${selected?.label ?? vazio}`}
         aria-invalid={invalid}
         render={
           <Button
@@ -155,7 +158,7 @@ function CategoryPickerBase({
             <Tag className="size-3.5 shrink-0 text-muted-foreground" />
           )}
           <span className={`truncate ${selected ? '' : 'text-muted-foreground'}`}>
-            {selected?.label ?? 'Sem categoria'}
+            {selected?.label ?? vazio}
           </span>
         </span>
         <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />

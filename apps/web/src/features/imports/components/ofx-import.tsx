@@ -90,30 +90,39 @@ export function OfxImport() {
 
   return (
     <>
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-muted-foreground text-xs">Conta do extrato</span>
-          <Select
-            items={accountItems}
-            value={accountId ?? ''}
-            onValueChange={(next) => {
-              setAccountId(next as string)
-              setPreview(null)
-              setText(null)
-            }}
+      {/*
+       * Escolher a conta e o arquivo é o começo, não a tela: depois que o extrato é lido, a
+       * barra encolhe para uma linha e o espaço fica com o que importa, que é a conferência.
+       */}
+      <div
+        className={`flex flex-wrap items-center gap-2 ${
+          preview ? '' : 'rounded-xl border border-dashed bg-card/50 p-4'
+        }`}
+      >
+        <Select
+          items={accountItems}
+          value={accountId ?? ''}
+          onValueChange={(next) => {
+            setAccountId(next as string)
+            setPreview(null)
+            setText(null)
+          }}
+        >
+          <SelectTrigger
+            size={preview ? 'sm' : 'default'}
+            aria-label="Conta do extrato"
+            className="w-48"
           >
-            <SelectTrigger aria-label="Conta do extrato" className="w-56">
-              <SelectValue placeholder="Escolha a conta" />
-            </SelectTrigger>
-            <SelectContent>
-              {accountItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+            <SelectValue placeholder="Escolha a conta" />
+          </SelectTrigger>
+          <SelectContent>
+            {accountItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <input
           ref={arquivoRef}
@@ -123,15 +132,17 @@ export function OfxImport() {
           onChange={(event) => escolherArquivo(event.target.files?.[0])}
         />
         <Button
-          variant="outline"
+          variant={preview ? 'ghost' : 'outline'}
+          size={preview ? 'sm' : 'default'}
           disabled={!accountId || lendo}
           onClick={() => arquivoRef.current?.click()}
+          className={preview ? 'text-muted-foreground' : undefined}
         >
           <FileUp />
           {lendo ? 'Lendo…' : nomeDoArquivo ? 'Trocar arquivo' : 'Escolher arquivo OFX'}
         </Button>
 
-        <p className="text-muted-foreground text-xs">
+        <p className="min-w-0 truncate text-muted-foreground text-xs">
           {nomeDoArquivo ?? 'Exporte o extrato em OFX no aplicativo do seu banco.'}
         </p>
       </div>

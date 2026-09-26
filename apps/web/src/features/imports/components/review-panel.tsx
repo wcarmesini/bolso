@@ -1,26 +1,26 @@
-import {
-  type ImportDecision,
-  type ImportMatch,
-  type ImportPreview,
-  type ImportRow,
-  importActions,
-  type PendingDecision,
-  type PendingDraft,
+import type {
+  ImportDecision,
+  ImportMatch,
+  ImportPreview,
+  ImportRow,
+  PendingDecision,
 } from '@bolso/shared'
 import {
   ArrowLeftRight,
   Check,
+  ChevronDown,
   Clock,
   EyeOff,
   Link2,
+  type LucideIcon,
   Pencil,
   Plus,
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
-import { StatGrid } from '@/components/stat-grid'
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Command,
   CommandEmpty,
@@ -28,6 +28,13 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
@@ -36,7 +43,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useAccounts } from '@/features/accounts/queries'
 import { useCategories } from '@/features/categories/queries'
 import { useContacts } from '@/features/contacts/queries'
@@ -53,41 +59,30 @@ import { formatCents } from '@/lib/money'
  * É a mesma tela para o extrato OFX e para o banco conectado, porque a pergunta é a mesma —
  * isto é novo, ou já está lançado? O que muda são os rótulos: num caso a pessoa "importa",
  * no outro "aprova" o que o Bolso buscou sozinho.
+ *
+ * O desenho segue o que a tarefa é de verdade: uma **lista para percorrer**, não um formulário
+ * por linha. Cada linha mostra o que o banco mandou e **a decisão** que está tomada; o resto
+ * (trocar o par, escolher a outra conta, detalhar) aparece quando aquela decisão pede. Quem
+ * precisa resolver trinta linhas iguais marca todas e decide de uma vez, na barra de baixo.
  */
 
 /*
  * "Depois" não é uma decisão que vai para o servidor: é a ausência dela. A linha simplesmente
  * não entra na lista enviada, e continua esperando na fila do banco. É diferente de
- * "Dispensar", que resolve a linha para sempre — a pessoa disse que aquilo não interessa.
+ * "dispensar", que resolve a linha e a tira do caminho.
  */
-export type AcaoDaLinha = ImportDecision['action'] | 'later'
+type Acao = ImportDecision['action'] | 'later'
 
-export type Decisao = {
-  action: AcaoDaLinha
+type Decisao = {
+  action: Acao
   categoryId: string | null
-  /** Com qual lançamento do Bolso esta linha vai ser conciliada */
-  transactionId: string | null
-  /** Na transferência: a outra conta, para onde o dinheiro foi ou de onde veio */
-  counterAccountId: string | null
-  /** Só o formulário completo preenche: o seletor da linha não tem contato */
   contactId: string | null
-  /** O que o formulário completo preencheu, quando a pessoa detalhou a linha */
-  draft: PendingDraft | null
+  transactionId: string | null
+  counterAccountId: string | null
+  draft: PendingDecision['draft']
 }
 
-const IMPORTAR = { value: 'create', label: 'Importar', icon: Plus } as const
-const APROVAR = { value: 'create', label: 'Aprovar', icon: Plus } as const
-const CONCILIAR = { value: 'link', label: 'Conciliar', icon: Link2 } as const
-const TRANSFERIR = { value: 'transfer', label: 'Transferir', icon: ArrowLeftRight } as const
-const DEPOIS = {
-  value: 'later',
-  label: 'Depois',
-  icon: Clock,
-  dica: 'Continua esperando; aparece de novo na próxima vez',
-} as const
-
-/** O que a linha faz por padrão: nova entra, parecida concilia, já importada fica de fora */
-const acaoPadrao = (row: ImportRow): AcaoDaLinha =>
+const acaoPadrao = (row: ImportRow): Acao =>
   row.status === 'new' ? 'create' : row.status === 'match' ? 'link' : 'skip'
 
 /*
@@ -112,6 +107,16 @@ const decisaoPadrao = (row: ImportRow): Decisao =>
         contactId: null,
         draft: null,
       }
+
+/** Uma decisão sem nada escolhido, para partir de algum lugar */
+const vazia = (): Decisao => ({
+  action: 'skip',
+  categoryId: null,
+  transactionId: null,
+  counterAccountId: null,
+  contactId: null,
+  draft: null,
+})
 
 export type TextosDaConferencia = {
   /** "Importar" (arquivo) ou "Aprovar" (banco conectado) */
@@ -159,20 +164,30 @@ export const textosDoBanco: TextosDaConferencia = {
   fonte: 'no banco',
 }
 
+/** Como cada decisão se chama e se desenha, do jeito que a pessoa a vê na linha */
+type Rotulo = { label: string; icon: LucideIcon; tom?: string }
+
+const rotulosDe = (textos: TextosDaConferencia): Record<Acao, Rotulo> => ({
+  create: {
+    label: textos.entrar === 'aprovar' ? 'Aprovar' : 'Importar',
+    icon: Plus,
+    tom: 'text-primary',
+  },
+  link: { label: 'Conciliar', icon: Link2, tom: 'text-primary' },
+  transfer: { label: 'Transferir', icon: ArrowLeftRight },
+  later: { label: 'Depois', icon: Clock },
+  skip: { label: textos.foraLabel, icon: EyeOff },
+})
+
 type ReviewPanelProps = {
   preview: ImportPreview
   /** A conta do Bolso deste extrato ou desta conexão: a transferência sai dela ou entra nela */
   accountId: string
   textos: TextosDaConferencia
-  /** Linha de contexto acima dos números (conta, período, banco) */
+  /** Linha de contexto acima da lista (conta, período, banco) */
   resumo?: ReactNode
   salvando: boolean
   onConfirmar: (decisions: ImportDecision[]) => void | Promise<void>
-  /*
-   * Resolve **uma** linha na hora, quando existe fila guardada do outro lado (o banco
-   * conectado). É o que faz o botão de detalhar terminar o serviço: quem preencheu o
-   * formulário inteiro e salvou já disse o que queria daquela linha.
-   */
   /** Guarda o rascunho da decisão no banco (só existe onde há fila guardada) */
   onGuardar?: (decisions: { id: string; decision: PendingDecision | null }[]) => void
 }
@@ -188,7 +203,9 @@ export function ReviewPanel({
 }: ReviewPanelProps) {
   const { data: categories = [] } = useCategories()
   const { data: accounts = [] } = useAccounts()
+  const { data: contatos = [] } = useContacts()
   const [decisoes, setDecisoes] = useState<Record<string, Decisao>>({})
+  const [marcadas, setMarcadas] = useState<Set<string>>(() => new Set())
 
   /*
    * A leitura chega de novo o tempo todo — a busca automática traz linhas, outra pessoa do
@@ -205,11 +222,21 @@ export function ReviewPanel({
         preview.rows.map((row) => [row.fitId, atual[row.fitId] ?? decisaoPadrao(row)]),
       ),
     )
+    setMarcadas((atual) => {
+      const vivas = new Set(preview.rows.map((row) => row.fitId))
+      const proximas = new Set([...atual].filter((fitId) => vivas.has(fitId)))
+      return proximas.size === atual.size ? atual : proximas
+    })
   }, [preview])
 
   // As despesas são o caso comum; a árvore muda conforme o sinal da linha
   const arvoreDespesa = useMemo(() => categoryTree(categories, 'expense'), [categories])
   const arvoreReceita = useMemo(() => categoryTree(categories, 'income'), [categories])
+  const rotulos = useMemo(() => rotulosDe(textos), [textos])
+  const nomeDoContato = useMemo(
+    () => new Map(contatos.map((contato) => [contato.id, contato.name])),
+    [contatos],
+  )
 
   /** A linha que está sendo detalhada no formulário completo */
   const [detalhando, setDetalhando] = useState<ImportRow | null>(null)
@@ -219,7 +246,6 @@ export function ReviewPanel({
    * Os vínculos vivem nas decisões, não no palpite que veio do servidor: assim trocar um par
    * atualiza na hora quem está livre e o que ficou sem par, sem nova consulta.
    */
-
   const emUso = useMemo(() => {
     const mapa = new Map<string, { fitId: string; rotulo: string; amountCents: number }[]>()
     for (const row of preview.rows) {
@@ -237,6 +263,14 @@ export function ReviewPanel({
     }
     return mapa
   }, [preview, decisoes])
+
+  /*
+   * O mapa de quem está ocupado muda a cada escolha, e ele só é lido quando alguém abre o
+   * seletor de par. Passá-lo como propriedade faria as duzentas linhas se redesenharem a cada
+   * clique; numa referência, ele fica à mão sem custar nada.
+   */
+  const emUsoRef = useRef(emUso)
+  emUsoRef.current = emUso
 
   /*
    * Uma compra que o banco cobrou em duas vezes: as duas linhas apontam para o mesmo
@@ -291,9 +325,12 @@ export function ReviewPanel({
    * parou. Falhar ao guardar não desfaz nada na tela: o aviso já apareceu, e insistir
    * bastaria clicar de novo.
    */
-  const guardar = (mudados: Record<string, Decisao>) => {
-    if (!onGuardar) return
-    onGuardar(
+  const guardarRef = useRef(onGuardar)
+  guardarRef.current = onGuardar
+  const guardar = useCallback((mudados: Record<string, Decisao>) => {
+    const enviar = guardarRef.current
+    if (!enviar) return
+    enviar(
       Object.entries(mudados).map(([fitId, decisao]) => ({
         id: fitId,
         decision: {
@@ -306,70 +343,80 @@ export function ReviewPanel({
         },
       })),
     )
-  }
+  }, [])
 
-  const mudarDecisao = (fitId: string, mudanca: Partial<Decisao>) =>
-    setDecisoes((atual) => {
-      const anterior: Decisao = atual[fitId] ?? {
-        action: 'skip',
-        categoryId: null,
-        transactionId: null,
-        counterAccountId: null,
-        contactId: null,
-        draft: null,
-      }
-      const nova = { ...anterior, ...mudanca }
-      guardar({ [fitId]: nova })
-      return { ...atual, [fitId]: nova }
-    })
+  const mudarDecisao = useCallback(
+    (fitId: string, mudanca: Partial<Decisao>) =>
+      setDecisoes((atual) => {
+        const nova = { ...(atual[fitId] ?? vazia()), ...mudanca }
+        guardar({ [fitId]: nova })
+        return { ...atual, [fitId]: nova }
+      }),
+    [guardar],
+  )
+
+  /** A mesma decisão para todas as linhas marcadas, de uma vez só */
+  const mudarVarias = useCallback(
+    (fitIds: string[], mudanca: Partial<Decisao>) =>
+      setDecisoes((atual) => {
+        const proximo = { ...atual }
+        const mudados: Record<string, Decisao> = {}
+        for (const fitId of fitIds) {
+          const nova = { ...(atual[fitId] ?? vazia()), ...mudanca }
+          proximo[fitId] = nova
+          mudados[fitId] = nova
+        }
+        guardar(mudados)
+        return proximo
+      }),
+    [guardar],
+  )
 
   /*
    * Escolher (ou trocar) o lançamento desta linha. Um lançamento pertence a uma linha só: se
    * já estava ligado a outra, sai de lá — é o que permite corrigir um palpite errado sem ter
    * de desfazer nada antes.
    */
-  const vincular = (fitId: string, transactionId: string | null, juntar = false) =>
-    setDecisoes((atual) => {
-      const proximo = { ...atual }
-      // Sem "juntar", o lançamento pertence a uma linha só: escolher aqui tira de lá
-      if (transactionId && !juntar) {
-        for (const [outro, decisao] of Object.entries(atual)) {
-          if (outro !== fitId && decisao.transactionId === transactionId) {
-            proximo[outro] = { ...decisao, action: 'create', transactionId: null }
+  const vincular = useCallback(
+    (fitId: string, transactionId: string | null, juntar = false) =>
+      setDecisoes((atual) => {
+        const proximo = { ...atual }
+        // Sem "juntar", o lançamento pertence a uma linha só: escolher aqui tira de lá
+        if (transactionId && !juntar) {
+          for (const [outro, decisao] of Object.entries(atual)) {
+            if (outro !== fitId && decisao.transactionId === transactionId) {
+              proximo[outro] = { ...decisao, action: 'create', transactionId: null }
+            }
           }
         }
-      }
-      const anterior = atual[fitId] ?? {
-        action: 'create',
-        categoryId: null,
-        transactionId: null,
-        counterAccountId: null,
-        contactId: null,
-        draft: null,
-      }
-      proximo[fitId] = transactionId
-        ? { ...anterior, action: 'link', transactionId }
-        : { ...anterior, action: 'create', transactionId: null }
-      // O que mudou aqui pode ser mais de uma linha: quem perdeu o par também foi mexido
-      guardar(
-        Object.fromEntries(
-          Object.entries(proximo).filter(([id, decisao]) => decisao !== atual[id]),
-        ),
-      )
-      return proximo
-    })
+        const anterior = atual[fitId] ?? vazia()
+        proximo[fitId] = transactionId
+          ? { ...anterior, action: 'link', transactionId }
+          : { ...anterior, action: 'create', transactionId: null }
+        // O que mudou aqui pode ser mais de uma linha: quem perdeu o par também foi mexido
+        guardar(
+          Object.fromEntries(
+            Object.entries(proximo).filter(([id, decisao]) => decisao !== atual[id]),
+          ),
+        )
+        return proximo
+      }),
+    [guardar],
+  )
 
-  /*
-   * Quem ficou "para depois" não entra na lista: o servidor só mexe no que recebe, então a
-   * linha continua esperando exatamente como estava.
-   */
-  /*
-   * Com o que o formulário abre.
-   *
-   * Se a linha já foi detalhada, o que vale é o rascunho guardado — abrir de novo com o texto
-   * do banco apagaria o trabalho na primeira vez que alguém salvasse sem reparar. Sem
-   * rascunho, o ponto de partida é o que o banco mandou.
-   */
+  const marcar = useCallback(
+    (fitId: string, ligada: boolean) =>
+      setMarcadas((atual) => {
+        const proximo = new Set(atual)
+        if (ligada) proximo.add(fitId)
+        else proximo.delete(fitId)
+        return proximo
+      }),
+    [],
+  )
+
+  const detalhar = useCallback((row: ImportRow) => setDetalhando(row), [])
+
   const valoresIniciais = useMemo(() => {
     const linha = detalhando
     if (!linha) return null
@@ -412,7 +459,6 @@ export function ReviewPanel({
         }),
     )
 
-  const entrarLabel = textos.entrar === 'aprovar' ? 'A aprovar' : 'A importar'
   const blocos = [
     {
       status: 'match' as const,
@@ -427,58 +473,97 @@ export function ReviewPanel({
     },
   ]
 
+  const porStatus = useMemo(() => {
+    const mapa = { match: [] as ImportRow[], new: [] as ImportRow[], imported: [] as ImportRow[] }
+    for (const row of preview.rows) mapa[row.status].push(row)
+    return mapa
+  }, [preview])
+
+  const decidiveis = porStatus.match.length + porStatus.new.length
+  const selecionadas = [...marcadas]
+
+  /*
+   * Categoria em massa só faz sentido quando as marcadas são todas do mesmo lado: as
+   * categorias de entrada e de saída são listas diferentes, e misturar não daria escolha
+   * possível. Marcou saídas e entradas juntas? As outras ações continuam valendo.
+   */
+  const tipoDasMarcadas = useMemo(() => {
+    let tipo: 'income' | 'expense' | null = null
+    for (const row of preview.rows) {
+      if (!marcadas.has(row.fitId)) continue
+      const dela = row.amountCents > 0 ? 'income' : 'expense'
+      if (tipo && tipo !== dela) return null
+      tipo = dela
+    }
+    return tipo
+  }, [preview, marcadas])
+
   return (
     <>
-      <StatGrid
-        stats={[
-          {
-            label: textos.entrar === 'aprovar' ? 'Esperando' : 'No extrato',
-            value: String(preview.rows.length),
-          },
-          { label: entrarLabel, value: String(contagem.create) },
-          { label: 'A conciliar', value: String(contagem.link) },
-          ...(contagem.transfer > 0
-            ? [{ label: 'Transferências', value: String(contagem.transfer) }]
-            : []),
-          semPar.length > 0
-            ? {
-                label: 'Sem par',
-                value: String(semPar.length),
-                tone: 'text-amber-600 dark:text-amber-400',
-              }
-            : { label: 'Fora', value: String(contagem.skip) },
-        ]}
-      >
-        {resumo}
-        <ContaDoExtrato preview={preview} />
-      </StatGrid>
+      {/* O contexto do que está na tela: a conta, o período e a conferência do saldo */}
+      {(resumo || preview.check.matches) && (
+        <div className="flex flex-col gap-1 px-1">
+          {resumo}
+          <ContaDoExtrato preview={preview} />
+        </div>
+      )}
 
       {blocos.map(({ status, titulo, texto }) => {
-        const linhas = preview.rows.filter((row) => row.status === status)
+        const linhas = porStatus[status]
         if (linhas.length === 0) return null
+        const idsDoBloco = linhas.map((row) => row.fitId)
+        const marcadasNoBloco = idsDoBloco.filter((fitId) => marcadas.has(fitId)).length
         return (
-          <section key={status} className="flex flex-col gap-1.5">
-            <div className="flex items-baseline justify-between gap-2 px-1">
-              <h2 className="text-muted-foreground text-xs">
-                {titulo} <span className="tabular-nums">({linhas.length})</span>
-              </h2>
-              <p className="hidden text-muted-foreground/70 text-xs sm:block">{texto}</p>
-            </div>
-            <ul className="divide-y rounded-xl border bg-card">
+          <section key={status}>
+            <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+              {/*
+               * O cabeçalho mora dentro da lista e gruda no topo: numa fila longa, rolando, a
+               * pessoa continua sabendo em que bloco está — e a caixa de marcar tudo fica
+               * alinhada com as das linhas, na mesma coluna.
+               */}
+              <li className="sticky top-0 z-[1] flex items-center gap-3 bg-muted/40 px-3 py-2 backdrop-blur">
+                {status === 'imported' ? (
+                  <span className="size-4 shrink-0" />
+                ) : (
+                  <Checkbox
+                    aria-label={`Marcar tudo em ${titulo}`}
+                    checked={marcadasNoBloco > 0 && marcadasNoBloco === idsDoBloco.length}
+                    indeterminate={marcadasNoBloco > 0 && marcadasNoBloco < idsDoBloco.length}
+                    onCheckedChange={(ligada) =>
+                      setMarcadas((atual) => {
+                        const proximo = new Set(atual)
+                        for (const fitId of idsDoBloco) {
+                          if (ligada) proximo.add(fitId)
+                          else proximo.delete(fitId)
+                        }
+                        return proximo
+                      })
+                    }
+                  />
+                )}
+                <h2 className="shrink-0 font-medium text-xs">
+                  {titulo} <span className="tabular-nums">({linhas.length})</span>
+                </h2>
+                <p className="hidden truncate text-muted-foreground text-xs sm:block">{texto}</p>
+              </li>
               {linhas.map((row) => (
                 <Linha
                   key={row.fitId}
                   row={row}
+                  contatoNome={nomeDoContato.get(decisoes[row.fitId]?.contactId ?? '') ?? null}
                   textos={textos}
+                  rotulos={rotulos}
                   decisao={decisoes[row.fitId] ?? decisaoPadrao(row)}
+                  marcada={marcadas.has(row.fitId)}
                   arvore={row.amountCents > 0 ? arvoreReceita : arvoreDespesa}
-                  onMudar={(mudanca) => mudarDecisao(row.fitId, mudanca)}
                   disponiveis={todosDisponiveis}
-                  emUso={emUso}
+                  emUsoRef={emUsoRef}
                   divisao={divisoes.get(decisoes[row.fitId]?.transactionId ?? '') ?? null}
-                  onDetalhar={() => setDetalhando(row)}
                   outrasContas={outrasContas}
-                  onVincular={(transactionId, juntar) => vincular(row.fitId, transactionId, juntar)}
+                  onMarcar={marcar}
+                  onMudar={mudarDecisao}
+                  onDetalhar={detalhar}
+                  onVincular={vincular}
                 />
               ))}
             </ul>
@@ -500,12 +585,6 @@ export function ReviewPanel({
         month={(detalhando?.date ?? preview.start ?? '').slice(0, 7)}
         initialValues={valoresIniciais}
         lockKeyFields
-        /*
-         * Detalhar não cria nada: o preenchimento vira **rascunho** da decisão. O lançamento
-         * nasce quando a pessoa aprovar a fila — uma vez, num lote só. Criar ali na hora
-         * enchia o histórico de importações de lotes de uma linha, e deixava lançamento solto
-         * quando a confirmação não vinha.
-         */
         onSubmitValues={(values) => {
           const linha = detalhando
           if (!linha) return
@@ -524,32 +603,56 @@ export function ReviewPanel({
         }}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-muted-foreground text-sm">
-          {divisoesAbertas > 0 ? (
-            <span className="text-amber-600 dark:text-amber-400">
-              {divisoesAbertas === 1
-                ? 'As partes de um lançamento dividido não somam o valor dele.'
-                : `${divisoesAbertas} lançamentos divididos têm partes que não somam o valor deles.`}
-            </span>
-          ) : contagem.semDestino > 0 ? (
-            <span className="text-amber-600 dark:text-amber-400">
-              Escolha a outra conta {contagem.semDestino === 1 ? 'da' : 'das'}{' '}
-              {contagem.semDestino === 1
-                ? 'transferência'
-                : `${contagem.semDestino} transferências`}{' '}
-              para continuar.
-            </span>
-          ) : (
-            <>
-              {contagem.create} a {textos.entrar},{' '}
-              {contagem.transfer > 0 && `${contagem.transfer} a transferir, `}
-              {contagem.link} a conciliar
-              {contagem.later > 0 && `, ${contagem.later} para depois`} e {contagem.skip}{' '}
-              {textos.temDepois ? 'dispensados' : 'de fora'}.
-            </>
-          )}
-        </p>
+      {/*
+       * A barra fica colada no rodapé da janela: com cinquenta linhas, o botão de confirmar
+       * estaria a uma rolagem inteira de distância, e o que a pessoa marcou lá em cima teria
+       * de ser levado de memória até aqui embaixo.
+       */}
+      <div className="-mx-4 md:-mx-6 sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur md:px-6">
+        {selecionadas.length > 0 ? (
+          <AcoesEmMassa
+            quantas={selecionadas.length}
+            textos={textos}
+            rotulos={rotulos}
+            arvore={tipoDasMarcadas === 'income' ? arvoreReceita : arvoreDespesa}
+            tipo={tipoDasMarcadas}
+            onAcao={(action) => {
+              mudarVarias(selecionadas, { action })
+              setMarcadas(new Set())
+            }}
+            onCategoria={(categoryId) => {
+              mudarVarias(selecionadas, { action: 'create', categoryId })
+              setMarcadas(new Set())
+            }}
+            onLimpar={() => setMarcadas(new Set())}
+          />
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            {divisoesAbertas > 0 ? (
+              <span className="text-amber-600 dark:text-amber-400">
+                {divisoesAbertas === 1
+                  ? 'As partes de um lançamento dividido não somam o valor dele.'
+                  : `${divisoesAbertas} lançamentos divididos têm partes que não somam o valor deles.`}
+              </span>
+            ) : contagem.semDestino > 0 ? (
+              <span className="text-amber-600 dark:text-amber-400">
+                Escolha a outra conta {contagem.semDestino === 1 ? 'da' : 'das'}{' '}
+                {contagem.semDestino === 1
+                  ? 'transferência'
+                  : `${contagem.semDestino} transferências`}{' '}
+                para continuar.
+              </span>
+            ) : (
+              <>
+                {contagem.create} a {textos.entrar},{' '}
+                {contagem.transfer > 0 && `${contagem.transfer} a transferir, `}
+                {contagem.link} a conciliar
+                {contagem.later > 0 && `, ${contagem.later} para depois`} e {contagem.skip}{' '}
+                {textos.temDepois ? 'dispensados' : 'de fora'}.
+              </>
+            )}
+          </p>
+        )}
         <Button
           onClick={confirmar}
           disabled={
@@ -560,13 +663,77 @@ export function ReviewPanel({
           }
         >
           {salvando ? textos.confirmando : textos.confirmar}
+          {decidiveis > 0 && !salvando && (
+            <span className="tabular-nums opacity-80">
+              {contagem.create + contagem.link + contagem.transfer}
+            </span>
+          )}
         </Button>
       </div>
     </>
   )
 }
 
-/** A conta do extrato: saldo anterior + movimento = saldo final. Fechou, nada se perdeu. */
+/** O que dá para fazer com as linhas marcadas, sem abrir uma por uma */
+function AcoesEmMassa({
+  quantas,
+  textos,
+  rotulos,
+  arvore,
+  tipo,
+  onAcao,
+  onCategoria,
+  onLimpar,
+}: {
+  quantas: number
+  textos: TextosDaConferencia
+  rotulos: Record<Acao, Rotulo>
+  arvore: ReturnType<typeof categoryTree>
+  /** `null` quando há entradas e saídas juntas: aí não existe uma lista de categorias só */
+  tipo: 'income' | 'expense' | null
+  onAcao: (action: Acao) => void
+  onCategoria: (categoryId: string | null) => void
+  onLimpar: () => void
+}) {
+  const emMassa: Acao[] = ['create', ...(textos.temDepois ? (['later'] as Acao[]) : []), 'skip']
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm tabular-nums">
+        {quantas} {quantas === 1 ? 'marcada' : 'marcadas'}
+      </span>
+      {/* Vinte tarifas do mesmo banco viram uma categoria só, num gesto */}
+      {tipo && (
+        <div className="w-48">
+          <CategoryPicker
+            tree={arvore}
+            kind={tipo}
+            value={null}
+            vazio="Definir categoria…"
+            onChange={onCategoria}
+            label={`Categoria das ${quantas} marcadas`}
+          />
+        </div>
+      )}
+      {emMassa.map((acao) => {
+        const { label, icon: Icone } = rotulos[acao]
+        return (
+          <Button key={acao} variant="outline" size="sm" onClick={() => onAcao(acao)}>
+            <Icone />
+            {label}
+          </Button>
+        )
+      })}
+      <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onLimpar}>
+        Limpar
+      </Button>
+    </div>
+  )
+}
+
+/**
+ * A conferência do extrato: saldo anterior mais o movimento dá o saldo final que o banco diz.
+ * Quando fecha, é a prova de que nada se perdeu no caminho.
+ */
 function ContaDoExtrato({ preview }: { preview: ImportPreview }) {
   const { check, balanceLines } = preview
   const avisos = []
@@ -600,238 +767,287 @@ function ContaDoExtrato({ preview }: { preview: ImportPreview }) {
 
 type LinhaProps = {
   row: ImportRow
+  /** O nome do contato já escolhido, resolvido lá em cima: aqui é só texto */
+  contatoNome: string | null
   textos: TextosDaConferencia
+  rotulos: Record<Acao, Rotulo>
   decisao: Decisao
+  marcada: boolean
   arvore: ReturnType<typeof categoryTree>
-  onMudar: (mudanca: Partial<Decisao>) => void
-  /** Tudo o que está lançado no período e pode virar o par desta linha */
   disponiveis: ImportMatch[]
-  /** Lançamento → as linhas que já o escolheram (mais de uma = ele vai ser dividido) */
-  emUso: Map<string, { fitId: string; rotulo: string; amountCents: number }[]>
-  /** Quando esta linha divide um lançamento com outras: como está a soma */
+  emUsoRef: React.RefObject<Map<string, { fitId: string; rotulo: string; amountCents: number }[]>>
   divisao: { soma: number; alvo: number; bate: boolean } | null
-  /** Abre o formulário completo para detalhar esta linha antes de aprovar */
-  onDetalhar: () => void
-  /** As contas que podem ser a outra ponta de uma transferência */
   outrasContas: { id: string; name: string }[]
-  onVincular: (transactionId: string | null, juntar?: boolean) => void
+  onMarcar: (fitId: string, ligada: boolean) => void
+  onMudar: (fitId: string, mudanca: Partial<Decisao>) => void
+  onDetalhar: (row: ImportRow) => void
+  onVincular: (fitId: string, transactionId: string | null, juntar?: boolean) => void
 }
 
-function Linha({
+/**
+ * Uma linha da conferência.
+ *
+ * Memoizada de propósito: numa fila de duzentas linhas, cada clique redesenhava as duzentas —
+ * e um segundo inteiro se passava entre clicar e ver. As funções chegam prontas de cima e
+ * recebem o `fitId`, para nenhuma delas mudar de identidade a cada render.
+ */
+const Linha = memo(function Linha({
   row,
+  contatoNome,
   textos,
+  rotulos,
   decisao,
+  marcada,
   arvore,
-  onMudar,
   disponiveis,
-  emUso,
+  emUsoRef,
   divisao,
   outrasContas,
+  onMarcar,
+  onMudar,
   onDetalhar,
   onVincular,
 }: LinhaProps) {
-  const { data: contatos = [] } = useContacts()
+  const [escolhendoPar, setEscolhendoPar] = useState(false)
   const entrada = row.amountCents > 0
-  const escolhido =
-    row.status === 'imported'
-      ? row.match
-      : (disponiveis.find((item) => item.id === decisao.transactionId) ?? null)
-  const conciliando = decisao.action === 'link' && escolhido !== null
+  const jaEntrou = row.status === 'imported'
+  const escolhido = jaEntrou
+    ? row.match
+    : (disponiveis.find((item) => item.id === decisao.transactionId) ?? null)
+  const conciliando = decisao.action === 'link'
+  const rotulo = rotulos[decisao.action]
 
-  const entrar = textos.entrar === 'aprovar' ? APROVAR : IMPORTAR
-  const fora = {
-    value: 'skip',
-    label: textos.foraLabel,
-    icon: EyeOff,
-    dica: textos.foraDica,
-  } as const
-  /*
-   * "Conciliar" só aparece quando existe um lançamento escolhido para esta linha, e
-   * "Transferir" só quando há outra conta para onde mandar o dinheiro.
-   */
-  const acoes = [
-    ...(escolhido !== null ? [CONCILIAR] : []),
-    entrar,
-    ...(outrasContas.length > 0 ? [TRANSFERIR] : []),
-    ...(textos.temDepois ? [DEPOIS] : []),
-    fora,
+  const detalhes = [
+    shortDate(row.date),
+    decisao.draft && decisao.draft.description !== row.description
+      ? `no banco: ${row.description}`
+      : null,
+    row.kind,
+    /*
+     * A parcela precisa aparecer aqui: o valor desta linha é de uma prestação, mas o gasto é
+     * da data da compra — e é nessa data que ela vai entrar. Sem dizer isso, quem confere
+     * acha que o Bolso errou o mês.
+     */
+    row.installment
+      ? `parcela ${row.installment.number}/${row.installment.count} · compra em ${shortDate(row.installment.purchaseDate)}`
+      : null,
+    contatoNome,
+  ].filter(Boolean)
+
+  const opcoes: Acao[] = [
+    'create',
+    'link',
+    ...(outrasContas.length > 0 ? (['transfer'] as Acao[]) : []),
+    ...(textos.temDepois ? (['later'] as Acao[]) : []),
+    'skip',
   ]
 
   return (
     <li
-      className={`flex flex-col gap-2 border-l-2 py-3 pr-4 pl-4 transition-colors ${
-        conciliando ? 'border-l-primary bg-primary/[0.04]' : 'border-l-transparent'
-      } ${row.status === 'imported' ? 'opacity-60' : ''}`}
+      className={`group/row flex flex-col gap-1.5 px-3 py-2.5 transition-colors ${
+        marcada ? 'bg-primary/[0.04]' : ''
+      } ${jaEntrou || decisao.action === 'skip' || decisao.action === 'later' ? 'opacity-55' : ''}`}
     >
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="min-w-0">
-          {/* Detalhada: o que vale é o que a pessoa escreveu, e o texto do banco vira nota */}
-          <span className="block truncate text-sm">
-            {decisao.draft?.description || row.description || '—'}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {jaEntrou ? (
+          <span className="size-4 shrink-0" />
+        ) : (
+          <Checkbox
+            checked={marcada}
+            onCheckedChange={(ligada) => onMarcar(row.fitId, ligada)}
+            aria-label={`Marcar ${row.description || 'lançamento'}`}
+          />
+        )}
+
+        <span className="min-w-36 flex-1 basis-40">
+          <span className="flex items-center gap-1.5">
+            <span className="truncate text-sm">
+              {decisao.draft?.description || row.description || '—'}
+            </span>
+            <InstallmentBadge installment={row.installment} />
           </span>
           <span className="block truncate text-muted-foreground text-xs">
-            {[
-              shortDate(row.date),
-              decisao.draft && decisao.draft.description !== row.description
-                ? `no banco: ${row.description}`
-                : null,
-              row.kind,
-              /*
-               * A parcela precisa aparecer aqui: o valor desta linha é de uma prestação, mas
-               * o gasto é da data da compra — e é nessa data que ela vai entrar. Sem dizer
-               * isso, quem confere acha que o Bolso errou o mês.
-               */
-              row.installment
-                ? `parcela ${row.installment.number}/${row.installment.count} · compra em ${shortDate(row.installment.purchaseDate)}`
-                : null,
-              // Quem detalhou escolheu um contato: ele precisa aparecer, ou parece perdido
-              contatos.find((contato) => contato.id === decisao.contactId)?.name ?? null,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
+            {detalhes.join(' · ')}
           </span>
         </span>
+
+        {/* A categoria é o que falta em quase toda linha nova: fica à mão, não dentro de menu */}
+        {decisao.action === 'create' && !jaEntrou ? (
+          <div className="hidden w-44 shrink-0 md:block">
+            <CategoryPicker
+              tree={arvore}
+              kind={entrada ? 'income' : 'expense'}
+              value={decisao.categoryId}
+              onChange={(categoryId) => onMudar(row.fitId, { categoryId })}
+              label={`Categoria de ${row.description || 'lançamento'}`}
+            />
+          </div>
+        ) : (
+          <span className="hidden w-44 shrink-0 md:block" />
+        )}
+
+        {/* Coluna fixa no desktop; no celular, empurra a decisão para a beirada direita */}
         <span
-          className={`shrink-0 text-sm tabular-nums ${
+          className={`w-28 shrink-0 text-right text-sm tabular-nums max-md:w-auto max-md:flex-1 ${
             entrada ? 'text-emerald-600 dark:text-emerald-400' : ''
           }`}
         >
           {entrada ? '+' : '−'}
           {formatCents(Math.abs(row.amountCents))}
         </span>
+
+        {!jaEntrou && (
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label={`Decisão de ${row.description || 'lançamento'}`}
+                render={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`w-28 shrink-0 justify-between font-normal ${rotulo.tom ?? 'text-muted-foreground'}`}
+                  />
+                }
+              >
+                <span className="flex items-center gap-1.5">
+                  <rotulo.icon className="size-3.5" />
+                  {rotulo.label}
+                </span>
+                <ChevronDown className="opacity-70" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                {opcoes.map((acao) => {
+                  const { label, icon: Icone } = rotulos[acao]
+                  return (
+                    <DropdownMenuItem
+                      key={acao}
+                      onClick={() => {
+                        onMudar(row.fitId, { action: acao })
+                        // Conciliar sem par escolhido: a lista abre em seguida, é o passo que falta
+                        if (acao === 'link' && !decisao.transactionId) setEscolhendoPar(true)
+                      }}
+                    >
+                      <Check className={acao === decisao.action ? '' : 'opacity-0'} />
+                      <Icone className="text-muted-foreground" />
+                      {label}
+                    </DropdownMenuItem>
+                  )
+                })}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onDetalhar(row)}>
+                  <Pencil />
+                  Detalhar…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* No mouse, o lápis fica à mão sem ocupar a linha o tempo todo */}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onDetalhar(row)}
+              title="Preencher tudo neste lançamento"
+              aria-label={`Detalhar ${row.description || 'lançamento'}`}
+              className="hidden shrink-0 text-muted-foreground opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 pointer-fine:inline-flex"
+            >
+              <Pencil />
+            </Button>
+          </>
+        )}
       </div>
 
-      {/* O par: o que já está no Bolso e vai ficar ligado a esta linha */}
-      {escolhido && (
-        <p
-          className={`flex items-center gap-1.5 text-xs ${
-            conciliando ? 'text-primary' : 'text-muted-foreground'
-          }`}
-        >
-          <Link2 className="size-3.5 shrink-0" />
-          <span className="min-w-0 truncate">
-            {row.status === 'imported' ? 'Já é ' : 'Concilia com '}
-            <span className="font-medium">
-              {escolhido.description || 'lançamento sem descrição'}
-              {escolhido.installment &&
-                ` ${escolhido.installment.number}/${escolhido.installment.count}`}
-            </span>
-            {escolhido.categoryName && ` em ${escolhido.categoryName}`}
-            {` · ${shortDate(escolhido.purchaseDate)}`}
-            {divisao && (
-              <span className={divisao.bate ? '' : 'text-amber-600 dark:text-amber-400'}>
-                {' · '}
-                {divisao.bate
-                  ? `dividido: as partes somam ${formatCents(divisao.alvo)}`
-                  : `dividido: as partes somam ${formatCents(divisao.soma)} e ele é de ${formatCents(divisao.alvo)}`}
-              </span>
-            )}
-          </span>
-          {row.status !== 'imported' && (
-            <button
-              type="button"
-              onClick={() => onVincular(null)}
-              title="Desfazer este par"
-              aria-label={`Desfazer o par de ${row.description || 'lançamento'}`}
-              className="shrink-0 rounded text-muted-foreground hover:text-destructive"
+      {/* A segunda linha só existe quando a decisão pede algo: o par, ou a outra conta */}
+      {(conciliando || jaEntrou) && (
+        <div className="flex items-center gap-2 pl-7">
+          {escolhido ? (
+            <p
+              className={`flex min-w-0 items-center gap-1.5 text-xs ${
+                jaEntrou ? 'text-muted-foreground' : 'text-primary'
+              }`}
             >
-              <X className="size-3.5" />
-            </button>
+              <Link2 className="size-3.5 shrink-0" />
+              <span className="min-w-0 truncate">
+                {jaEntrou ? 'Já é ' : 'Concilia com '}
+                <span className="font-medium">
+                  {escolhido.description || 'lançamento sem descrição'}
+                  {escolhido.installment &&
+                    ` ${escolhido.installment.number}/${escolhido.installment.count}`}
+                </span>
+                {escolhido.categoryName && ` em ${escolhido.categoryName}`}
+                {` · ${shortDate(escolhido.purchaseDate)}`}
+                {divisao && (
+                  <span className={divisao.bate ? '' : 'text-amber-600 dark:text-amber-400'}>
+                    {' · '}
+                    {divisao.bate
+                      ? `dividido: as partes somam ${formatCents(divisao.alvo)}`
+                      : `dividido: as partes somam ${formatCents(divisao.soma)} e ele é de ${formatCents(divisao.alvo)}`}
+                  </span>
+                )}
+              </span>
+            </p>
+          ) : (
+            <p className="flex items-center gap-1.5 text-amber-600 text-xs dark:text-amber-400">
+              <TriangleAlert className="size-3.5 shrink-0" />
+              Escolha com qual lançamento esta linha se junta
+            </p>
           )}
-        </p>
+          {!jaEntrou && (
+            <EscolherPar
+              row={row}
+              escolhidoId={decisao.transactionId}
+              disponiveis={disponiveis}
+              emUsoRef={emUsoRef}
+              aberto={escolhendoPar}
+              onAberto={setEscolhendoPar}
+              onEscolher={(transactionId, juntar) => onVincular(row.fitId, transactionId, juntar)}
+            />
+          )}
+        </div>
       )}
 
-      {row.status !== 'imported' && (
-        <div className="flex flex-wrap items-center gap-2">
-          <ToggleGroup
-            variant="outline"
-            spacing={0}
-            size="sm"
-            value={[decisao.action]}
-            onValueChange={(next) => {
-              // A lista de ações vem do pacote compartilhado: esquecer uma aqui já custou caro
-              const acao = [...importActions, 'later' as const].find((valor) => valor === next[0])
-              if (acao) onMudar({ action: acao })
-            }}
+      {decisao.action === 'transfer' && !jaEntrou && (
+        <div className="flex items-center gap-2 pl-7">
+          <span className="shrink-0 text-muted-foreground text-xs">
+            {entrada ? 'veio de' : 'foi para'}
+          </span>
+          <Select
+            items={outrasContas.map((conta) => ({ value: conta.id, label: conta.name }))}
+            value={decisao.counterAccountId ?? ''}
+            onValueChange={(next) => onMudar(row.fitId, { counterAccountId: next as string })}
           >
-            {acoes.map((acao) => (
-              <ToggleGroupItem
-                key={acao.value}
-                value={acao.value}
-                title={'dica' in acao ? acao.dica : undefined}
-              >
-                <acao.icon />
-                {acao.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+            <SelectTrigger
+              size="sm"
+              aria-label={`Outra conta de ${row.description || 'lançamento'}`}
+              className="w-56"
+            >
+              <SelectValue placeholder="Escolha a conta" />
+            </SelectTrigger>
+            <SelectContent>
+              {outrasContas.map((conta) => (
+                <SelectItem key={conta.id} value={conta.id}>
+                  {conta.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
-          <EscolherPar
-            row={row}
-            escolhidoId={decisao.transactionId}
-            disponiveis={disponiveis}
-            emUso={emUso}
-            onEscolher={onVincular}
+      {/* No celular a categoria não cabe na linha de cima; aqui ela tem a largura toda */}
+      {decisao.action === 'create' && !jaEntrou && (
+        <div className="pl-7 md:hidden">
+          <CategoryPicker
+            tree={arvore}
+            kind={entrada ? 'income' : 'expense'}
+            value={decisao.categoryId}
+            onChange={(categoryId) => onMudar(row.fitId, { categoryId })}
+            label={`Categoria de ${row.description || 'lançamento'} (celular)`}
           />
-
-          {decisao.action === 'transfer' && (
-            <div className="flex min-w-56 flex-1 items-center gap-2">
-              <span className="shrink-0 text-muted-foreground text-xs">
-                {entrada ? 'veio de' : 'foi para'}
-              </span>
-              <Select
-                items={outrasContas.map((conta) => ({ value: conta.id, label: conta.name }))}
-                value={decisao.counterAccountId ?? ''}
-                onValueChange={(next) => onMudar({ counterAccountId: next as string })}
-              >
-                <SelectTrigger
-                  size="sm"
-                  aria-label={`Outra conta de ${row.description || 'lançamento'}`}
-                  className="w-full"
-                >
-                  <SelectValue placeholder="Escolha a conta" />
-                </SelectTrigger>
-                <SelectContent>
-                  {outrasContas.map((conta) => (
-                    <SelectItem key={conta.id} value={conta.id}>
-                      {conta.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {decisao.action === 'create' && (
-            <div className="flex min-w-56 flex-1 items-center gap-1">
-              <div className="min-w-0 flex-1">
-                <CategoryPicker
-                  tree={arvore}
-                  kind={entrada ? 'income' : 'expense'}
-                  value={decisao.categoryId}
-                  onChange={(categoryId) => onMudar({ categoryId })}
-                  label={`Categoria de ${row.description || 'lançamento'}`}
-                />
-              </div>
-              {/* A categoria resolve a maioria; quem precisa de contato, parcelas ou
-                  divisão abre o formulário inteiro sem sair da conferência */}
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={onDetalhar}
-                title="Preencher tudo neste lançamento"
-                aria-label={`Detalhar ${row.description || 'lançamento'}`}
-                className="shrink-0 text-muted-foreground"
-              >
-                <Pencil />
-              </Button>
-            </div>
-          )}
         </div>
       )}
     </li>
   )
-}
+})
 
 /**
  * O que está lançado no Bolso, nesta conta e neste período, e não apareceu do outro lado.
@@ -896,7 +1112,9 @@ type EscolherParProps = {
   row: ImportRow
   escolhidoId: string | null
   disponiveis: ImportMatch[]
-  emUso: Map<string, { fitId: string; rotulo: string; amountCents: number }[]>
+  emUsoRef: React.RefObject<Map<string, { fitId: string; rotulo: string; amountCents: number }[]>>
+  aberto: boolean
+  onAberto: (aberto: boolean) => void
   onEscolher: (transactionId: string | null, juntar?: boolean) => void
 }
 
@@ -905,47 +1123,58 @@ type EscolherParProps = {
  *
  * O palpite do Bolso acerta na maioria, mas dois gastos do mesmo valor na mesma semana são
  * indistinguíveis para ele e óbvios para quem lançou. Os de mesmo valor vêm em cima, marcados;
- * o resto fica na lista, e a busca aceita descrição ou valor.
+ * a busca serve para o resto. A lista só é montada quando a pessoa abre: ordenar centenas de
+ * candidatos em cada uma das centenas de linhas, a cada clique, era o que travava a tela.
  */
-function EscolherPar({ row, escolhidoId, disponiveis, emUso, onEscolher }: EscolherParProps) {
-  const [open, setOpen] = useState(false)
+function EscolherPar({
+  row,
+  escolhidoId,
+  disponiveis,
+  emUsoRef,
+  aberto,
+  onAberto,
+  onEscolher,
+}: EscolherParProps) {
   const [query, setQuery] = useState('')
-  if (row.status === 'imported') return null
 
   const mesmoValor = (item: ImportMatch) => item.amountCents === Math.abs(row.amountCents)
-  const chave = searchKey(query)
-  const lista = disponiveis
-    .filter(
-      (item) =>
-        !chave ||
-        searchKey(item.description).includes(chave) ||
-        formatCents(item.amountCents).includes(query.trim()),
-    )
-    .sort((a, b) => {
-      // Mesmo valor primeiro; depois, o mais perto da data da linha
-      if (mesmoValor(a) !== mesmoValor(b)) return mesmoValor(a) ? -1 : 1
-      const perto = (item: ImportMatch) =>
-        Math.abs(Date.parse(item.purchaseDate) - Date.parse(row.date))
-      return perto(a) - perto(b)
-    })
-    .slice(0, 40)
+  const lista = useMemo(() => {
+    if (!aberto) return []
+    const chave = searchKey(query)
+    return disponiveis
+      .filter(
+        (item) =>
+          !chave ||
+          searchKey(item.description).includes(chave) ||
+          formatCents(item.amountCents).includes(query.trim()),
+      )
+      .sort((a, b) => {
+        // Mesmo valor primeiro; depois, o mais perto da data da linha
+        const iguais = (item: ImportMatch) =>
+          item.amountCents === Math.abs(row.amountCents) ? 0 : 1
+        if (iguais(a) !== iguais(b)) return iguais(a) - iguais(b)
+        const perto = (item: ImportMatch) =>
+          Math.abs(Date.parse(item.purchaseDate) - Date.parse(row.date))
+        return perto(a) - perto(b)
+      })
+      .slice(0, 40)
+  }, [aberto, query, disponiveis, row.amountCents, row.date])
 
   return (
     <Popover
-      open={open}
+      open={aberto}
       onOpenChange={(next) => {
-        setOpen(next)
+        onAberto(next)
         if (!next) setQuery('')
       }}
     >
       <PopoverTrigger
-        render={<Button variant="ghost" size="sm" className="text-muted-foreground" />}
+        render={<Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" />}
         aria-label={`Escolher o lançamento de ${row.description || 'lançamento'}`}
       >
-        <Link2 />
-        {escolhidoId ? 'Trocar par' : 'Conciliar com…'}
+        {escolhidoId ? 'Trocar' : 'Escolher…'}
       </PopoverTrigger>
-      <PopoverContent align="start" sideOffset={4} className="w-96 p-0">
+      <PopoverContent align="end" sideOffset={4} className="w-96 p-0">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder="Buscar por descrição ou valor…"
@@ -956,7 +1185,7 @@ function EscolherPar({ row, escolhidoId, disponiveis, emUso, onEscolher }: Escol
           <CommandList className="max-h-72">
             <CommandEmpty>Nenhum lançamento deste período por aqui.</CommandEmpty>
             {lista.map((item) => {
-              const ocupantes = emUso.get(item.id) ?? []
+              const ocupantes = emUsoRef.current?.get(item.id) ?? []
               const ocupadoPorOutra = ocupantes.filter((linha) => linha.fitId !== row.fitId)
               /*
                * O lançamento já é de outra linha. Escolher aqui não rouba: as duas linhas
@@ -970,7 +1199,7 @@ function EscolherPar({ row, escolhidoId, disponiveis, emUso, onEscolher }: Escol
                   value={item.id}
                   onSelect={() => {
                     onEscolher(item.id, juntando)
-                    setOpen(false)
+                    onAberto(false)
                     setQuery('')
                   }}
                   className="flex-col items-start gap-0.5"
@@ -1003,6 +1232,22 @@ function EscolherPar({ row, escolhidoId, disponiveis, emUso, onEscolher }: Escol
             })}
           </CommandList>
         </Command>
+        {escolhidoId && (
+          <div className="border-t p-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-muted-foreground"
+              onClick={() => {
+                onEscolher(null)
+                onAberto(false)
+              }}
+            >
+              <X />
+              Desfazer este par
+            </Button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   )
