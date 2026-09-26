@@ -521,7 +521,7 @@ export function ReviewPanel({
                * pessoa continua sabendo em que bloco está — e a caixa de marcar tudo fica
                * alinhada com as das linhas, na mesma coluna.
                */}
-              <li className="sticky top-0 z-[1] flex items-center gap-3 bg-muted/40 px-3 py-2 backdrop-blur">
+              <li className="sticky top-0 z-[1] flex items-center gap-3 border-b bg-muted px-3 py-2">
                 {status === 'imported' ? (
                   <span className="size-4 shrink-0" />
                 ) : (
@@ -608,7 +608,11 @@ export function ReviewPanel({
        * estaria a uma rolagem inteira de distância, e o que a pessoa marcou lá em cima teria
        * de ser levado de memória até aqui embaixo.
        */}
-      <div className="-mx-4 md:-mx-6 sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur md:px-6">
+      {/*
+       * Fundo opaco, sem desfoque: `backdrop-filter` num elemento grudado é recalculado a cada
+       * quadro de rolagem, e o que se ganha em beleza se perde em fluidez na lista inteira.
+       */}
+      <div className="-mx-4 md:-mx-6 sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t bg-background px-4 py-3 md:px-6">
         {selecionadas.length > 0 ? (
           <AcoesEmMassa
             quantas={selecionadas.length}
@@ -844,6 +848,13 @@ const Linha = memo(function Linha({
 
   return (
     <li
+      /*
+       * `content-visibility` deixa o navegador pular o desenho do que está fora da tela: numa
+       * fila de duzentas linhas, ele passa a trabalhar só nas que a pessoa está vendo. O
+       * tamanho declarado é a altura comum de uma linha, para a barra de rolagem não pular —
+       * o `auto` faz ele guardar a altura real assim que a linha aparece uma vez.
+       */
+      style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 56px' }}
       className={`group/row flex flex-col gap-1.5 px-3 py-2.5 transition-colors ${
         marcada ? 'bg-primary/[0.04]' : ''
       } ${jaEntrou || decisao.action === 'skip' || decisao.action === 'later' ? 'opacity-55' : ''}`}
@@ -878,6 +889,7 @@ const Linha = memo(function Linha({
               tree={arvore}
               kind={entrada ? 'income' : 'expense'}
               value={decisao.categoryId}
+              variant="ghost"
               onChange={(categoryId) => onMudar(row.fitId, { categoryId })}
               label={`Categoria de ${row.description || 'lançamento'}`}
             />
@@ -1062,8 +1074,15 @@ function SemPar({
   periodo: [string | null, string | null]
   fonte: string
 }) {
+  const [tudo, setTudo] = useState(false)
   if (itens.length === 0) return null
   const [inicio, fim] = periodo
+  /*
+   * Este bloco é para conferir, não para agir: com cento e cinquenta linhas ele vira o dobro
+   * da tela e pesa a rolagem inteira. Mostra as primeiras e abre o resto a pedido.
+   */
+  const MOSTRAR = 8
+  const visiveis = tudo ? itens : itens.slice(0, MOSTRAR)
 
   return (
     <section className="flex flex-col gap-1.5">
@@ -1074,8 +1093,13 @@ function SemPar({
         </h2>
       </div>
       <ul className="divide-y rounded-xl border border-amber-500/30 bg-amber-500/[0.04]">
-        {itens.map((item) => (
-          <li key={item.id} className="flex items-baseline justify-between gap-3 px-4 py-2.5">
+        {visiveis.map((item) => (
+          <li
+            key={item.id}
+            // Como nas linhas de cima: o que está fora da tela não custa desenho
+            style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 54px' }}
+            className="flex items-baseline justify-between gap-3 px-4 py-2.5"
+          >
             <span className="min-w-0">
               {/* A parcela ao lado do nome, como na lista de lançamentos: é por ela que a
                   pessoa reconhece qual das dez é esta */}
@@ -1100,6 +1124,17 @@ function SemPar({
           </li>
         ))}
       </ul>
+      {!tudo && itens.length > MOSTRAR && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="self-start text-muted-foreground"
+          onClick={() => setTudo(true)}
+        >
+          Ver os outros {itens.length - MOSTRAR}
+        </Button>
+      )}
+
       <p className="px-1 text-muted-foreground text-xs">
         Estão lançados aqui{inicio && fim ? ` entre ${shortDate(inicio)} e ${shortDate(fim)}` : ''},
         mas o banco não os mostra. Confira o valor, a data e a conta — ou espere o banco processar.

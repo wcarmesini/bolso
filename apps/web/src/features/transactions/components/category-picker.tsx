@@ -32,6 +32,11 @@ type CategoryPickerProps = {
   invalid?: boolean
   /** O que aparece quando nada está escolhido ("Sem categoria", no lançamento) */
   vazio?: string
+  /*
+   * "ghost" é para listas longas: sem moldura, o seletor vira um rótulo clicável. Cento e
+   * cinquenta molduras na tela custam desenho a cada rolagem, e enchem o olho de caixas.
+   */
+  variant?: 'outline' | 'ghost'
 }
 
 /**
@@ -49,6 +54,7 @@ function CategoryPickerBase({
   label = 'Categoria',
   invalid,
   vazio = 'Sem categoria',
+  variant = 'outline',
 }: CategoryPickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -146,8 +152,10 @@ function CategoryPickerBase({
         aria-invalid={invalid}
         render={
           <Button
-            variant="outline"
-            className="w-full min-w-0 justify-between gap-2 font-normal aria-invalid:border-destructive"
+            variant={variant}
+            className={`w-full min-w-0 justify-between gap-2 font-normal aria-invalid:border-destructive ${
+              variant === 'ghost' ? 'px-2 text-muted-foreground' : ''
+            }`}
           />
         }
       >
