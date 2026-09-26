@@ -223,8 +223,14 @@ const InstallmentsField = memo(function InstallmentsField({ control }: Campo) {
 export const CashFields = memo(function CashFields({
   control,
   editando,
+  travado = false,
   setValue,
-}: Campo & { editando: boolean; setValue: UseFormSetValue<TransactionFormValues> }) {
+}: Campo & {
+  editando: boolean
+  /** Linha do banco virando rascunho: o que nasce é um lançamento só, sem parcelar */
+  travado?: boolean
+  setValue: UseFormSetValue<TransactionFormValues>
+}) {
   const { data: accounts = [] } = useAccounts()
   const accountId = useWatch({ control, name: 'accountId' })
   const purchaseDate = useWatch({ control, name: 'purchaseDate' })
@@ -245,6 +251,7 @@ export const CashFields = memo(function CashFields({
         {!cycle && <PaymentDateField control={control} />}
         {/* Parcelar é exceção: o campo só aparece para quem pedir */}
         {!editando &&
+          !travado &&
           (parcelando ? (
             <InstallmentsField control={control} />
           ) : (

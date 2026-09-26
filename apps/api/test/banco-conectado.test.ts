@@ -542,6 +542,10 @@ describe('parcela lida do texto', () => {
 describe('rascunho da classificação', () => {
   it('guarda o que foi decidido, devolve ao voltar e aplica ao aprovar', async () => {
     const linha = await esperando('rasc-1', '2026-09-26', -4500, 'POSTO XYZ')
+    const posto = await ana.json<{ id: string }>('/api/contacts', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Posto da esquina', kind: 'company', document: '', notes: '' }),
+    })
 
     const guardou = await ana.request(`/api/bank/connections/${conexaoId}/decisions`, {
       method: 'PUT',
@@ -552,14 +556,13 @@ describe('rascunho da classificação', () => {
             decision: {
               action: 'create',
               categoryId: mercado,
-              contactId: null,
+              contactId: posto.body.id,
               counterAccountId: null,
               transactionId: null,
               draft: {
                 description: 'Gasolina da viagem',
                 purchaseDate: '2026-09-24',
-                paymentDate: '2026-09-26',
-                notes: '',
+                paymentDate: '2026-09-28',
                 splits: [{ categoryId: mercado, amountCents: 4500 }],
               },
             },
@@ -576,23 +579,40 @@ describe('rascunho da classificação', () => {
     // Voltando à fila, a decisão está lá
     const fila = await ana.json<ImportPreview>(`/api/bank/connections/${conexaoId}/pending`)
     const daLinha = fila.body.rows.find((row) => row.fitId === linha?.id)
+    /*
+     * Tudo o que o formulário preencheu volta inteiro: é com isto que a tela reabre a caneta.
+     * Faltando um campo aqui, reabrir apaga o trabalho de quem detalhou a linha.
+     */
     expect(daLinha?.decision).toMatchObject({
       action: 'create',
       categoryId: mercado,
-      draft: { description: 'Gasolina da viagem', purchaseDate: '2026-09-24' },
+      contactId: posto.body.id,
+      draft: {
+        description: 'Gasolina da viagem',
+        purchaseDate: '2026-09-24',
+        paymentDate: '2026-09-28',
+        splits: [{ categoryId: mercado, amountCents: 4500 }],
+      },
     })
 
     // Aprovando, o lançamento nasce com o que foi preenchido
     await ana.json(`/api/bank/connections/${conexaoId}/approve`, {
       method: 'POST',
       body: JSON.stringify({
-        decisions: [{ fitId: linha?.id, action: 'create', categoryId: mercado, contactId: null }],
+        decisions: [
+          { fitId: linha?.id, action: 'create', categoryId: mercado, contactId: posto.body.id },
+        ],
       }),
     })
     const depois = await ana.json<Transaction[]>('/api/transactions?from=2026-09-20&to=2026-09-30')
     const criado = depois.body.find((item) => item.description === 'Gasolina da viagem')
-    expect(criado?.purchaseDate).toBe('2026-09-24')
-    expect(criado?.amountCents).toBe(4500)
+    expect(criado).toMatchObject({
+      purchaseDate: '2026-09-24',
+      // A data em que o dinheiro sai também é da pessoa, não a que o banco deu à linha
+      paymentDate: '2026-09-28',
+      contactId: posto.body.id,
+      amountCents: 4500,
+    })
     expect(criado?.splits).toEqual([{ categoryId: mercado, amountCents: 4500 }])
   })
 

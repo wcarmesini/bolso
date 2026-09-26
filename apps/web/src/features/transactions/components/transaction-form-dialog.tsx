@@ -267,7 +267,12 @@ export function TransactionFormDialog({
               <ContactField control={control} />
             </div>
 
-            <CashFields control={control} editando={Boolean(transaction)} setValue={setValue} />
+            <CashFields
+              control={control}
+              editando={Boolean(transaction)}
+              travado={travado}
+              setValue={setValue}
+            />
           </FieldGroup>
 
           {/*

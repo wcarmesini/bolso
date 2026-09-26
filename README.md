@@ -334,14 +334,16 @@ identificador. A tela só deixa confirmar quando as partes somam o valor do lan�
 desfazer pelo histórico devolve o valor inteiro e apaga as partes.
 
 **Detalhar antes de aprovar.** Ao lado da categoria, um lápis abre o **formulário completo**
-já preenchido com o que o banco mandou (valor, data, descrição, conta). Serve para o que a
-linha sozinha não diz: contato, parcelas, divisão em categorias, uma observação.
+já preenchido com o que o banco mandou. Serve para o que a linha sozinha não diz: o contato, a
+descrição em português, a data certa da compra, a divisão em categorias. O que identifica o
+movimento — valor, conta e tipo — fica travado, porque mudá-lo desfaria a conciliação. Parcelar
+não aparece aqui: a linha é uma cobrança só, e prometer dez seria promessa não cumprida.
 
-No banco conectado, salvar ali **termina a linha**: o lançamento nasce já conciliado e a linha
-sai da fila. Antes ficava só uma marcação na tela, e quem não apertasse "Aprovar" acabava com o
-lançamento solto de um lado e a linha esperando do outro — a mesma coisa contada duas vezes,
-sem ninguém ter errado nada. No extrato OFX a marcação continua valendo até a confirmação do
-arquivo, porque ali não existe fila guardada: o arquivo é de uma vez só.
+Salvar **não cria o lançamento**: vira o **rascunho** da decisão daquela linha, guardado no
+banco. O lançamento nasce quando a fila for aprovada, num lote só — assim o histórico de
+importações não fica com um lote por linha, e ninguém termina com lançamento solto de um lado e
+linha esperando do outro. Reabrir o lápis traz de volta o que foi escrito, e não o texto do
+banco: quem detalhou e abriu de novo não perde o trabalho por apertar Salvar sem reparar.
 
 **Cartão de crédito.** Cada compra cai na fatura do próprio mês, pelo dia de fechamento do
 cartão — importar três meses de uma vez continua certo, porque a conta é feita compra a compra

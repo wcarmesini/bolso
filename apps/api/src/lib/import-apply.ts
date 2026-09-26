@@ -57,9 +57,9 @@ export async function criarLancamento(
    * são o que identifica o movimento no banco.
    */
   rascunho: {
+    description: string
     purchaseDate: string
     paymentDate: string | null
-    notes: string
     splits: Parte[]
   } | null = null,
 ) {
@@ -78,11 +78,16 @@ export async function criarLancamento(
       groupId: contexto.groupId,
       type: tipoDe(linha.amountCents),
       amountCents,
-      description: linha.description,
+      /*
+       * O que a pessoa escreveu vale mais que o texto do banco: ela detalhou a linha
+       * justamente para trocar "PARC=110IMUNO PARC 02/10" por "Vacinas do Vicente".
+       */
+      description: rascunho?.description?.trim() || linha.description,
       accountId: contexto.accountId,
       contactId,
       purchaseDate,
-      ...cashFields(linha.date, linha.date, contexto.cycle),
+      // No cartão o pagamento é a fatura, calculada; na conta comum, a data que ela corrigiu
+      ...cashFields(linha.date, rascunho?.paymentDate ?? linha.date, contexto.cycle),
       installmentGroupId: parcela?.groupId ?? null,
       installmentNumber: parcela?.number ?? null,
       installmentCount: parcela?.count ?? null,

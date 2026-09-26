@@ -110,7 +110,6 @@ export const pendingDraftSchema = z.object({
   description: z.string().trim().max(120),
   purchaseDate: z.iso.date('Data inválida'),
   paymentDate: z.iso.date('Data inválida').nullable(),
-  notes: z.string().trim().max(500).default(''),
   splits: z
     .array(z.object({ categoryId: z.uuid().nullable(), amountCents: z.number().int() }))
     .max(20)

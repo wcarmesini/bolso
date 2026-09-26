@@ -39,6 +39,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useAccounts } from '@/features/accounts/queries'
 import { useCategories } from '@/features/categories/queries'
+import { useContacts } from '@/features/contacts/queries'
 import { categoryTree, searchKey } from '@/features/transactions/category-options'
 import { CategoryPicker } from '@/features/transactions/components/category-picker'
 import { InstallmentBadge } from '@/features/transactions/components/installment-badge'
@@ -362,6 +363,36 @@ export function ReviewPanel({
    * Quem ficou "para depois" não entra na lista: o servidor só mexe no que recebe, então a
    * linha continua esperando exatamente como estava.
    */
+  /*
+   * Com o que o formulário abre.
+   *
+   * Se a linha já foi detalhada, o que vale é o rascunho guardado — abrir de novo com o texto
+   * do banco apagaria o trabalho na primeira vez que alguém salvasse sem reparar. Sem
+   * rascunho, o ponto de partida é o que o banco mandou.
+   */
+  const valoresIniciais = useMemo(() => {
+    const linha = detalhando
+    if (!linha) return null
+    const decisao = decisoes[linha.fitId]
+    const rascunho = decisao?.draft
+    const amountCents = Math.abs(linha.amountCents)
+    return {
+      type: (linha.amountCents > 0 ? 'income' : 'expense') as 'income' | 'expense',
+      amountCents,
+      accountId,
+      description: rascunho?.description ?? linha.description,
+      contactId: decisao?.contactId ?? null,
+      // Parcela: a competência é a data da compra; o caixa continua sendo o da parcela
+      purchaseDate: rascunho?.purchaseDate ?? linha.installment?.purchaseDate ?? linha.date,
+      paymentDate: rascunho?.paymentDate ?? linha.date,
+      splits:
+        rascunho && rascunho.splits.length > 0
+          ? rascunho.splits
+          : [{ categoryId: decisao?.categoryId ?? null, amountCents }],
+    }
+    // Um objeto novo a cada render faria o formulário se recarregar enquanto a pessoa digita
+  }, [detalhando, decisoes, accountId])
+
   const confirmar = () =>
     onConfirmar(
       preview.rows
@@ -458,9 +489,8 @@ export function ReviewPanel({
       <SemPar itens={semPar} periodo={[preview.start, preview.end]} fonte={textos.fonte} />
 
       {/*
-       * Detalhar uma linha: o formulário de sempre, já preenchido com o que o banco mandou.
-       * Ao salvar, o lançamento passa a existir e a linha fica conciliada com ele — nada
-       * entra duas vezes, e a pessoa não perdeu o fio da conferência.
+       * Detalhar uma linha: o formulário de sempre, preenchido com o rascunho guardado — ou,
+       * na primeira vez, com o que o banco mandou. Salvar não cria nada: guarda a decisão.
        */}
       <TransactionFormDialog
         open={detalhando !== null}
@@ -468,25 +498,7 @@ export function ReviewPanel({
           if (!aberto) setDetalhando(null)
         }}
         month={(detalhando?.date ?? preview.start ?? '').slice(0, 7)}
-        initialValues={
-          detalhando
-            ? {
-                type: detalhando.amountCents > 0 ? 'income' : 'expense',
-                amountCents: Math.abs(detalhando.amountCents),
-                description: detalhando.description,
-                accountId,
-                // Parcela: a competência é a data da compra; o caixa continua sendo o da parcela
-                purchaseDate: detalhando.installment?.purchaseDate ?? detalhando.date,
-                paymentDate: detalhando.date,
-                splits: [
-                  {
-                    categoryId: decisoes[detalhando.fitId]?.categoryId ?? null,
-                    amountCents: Math.abs(detalhando.amountCents),
-                  },
-                ],
-              }
-            : null
-        }
+        initialValues={valoresIniciais}
         lockKeyFields
         /*
          * Detalhar não cria nada: o preenchimento vira **rascunho** da decisão. O lançamento
@@ -505,7 +517,6 @@ export function ReviewPanel({
               description: values.description,
               purchaseDate: values.purchaseDate,
               paymentDate: values.paymentDate,
-              notes: '',
               splits: values.splits,
             },
           })
@@ -619,6 +630,7 @@ function Linha({
   onDetalhar,
   onVincular,
 }: LinhaProps) {
+  const { data: contatos = [] } = useContacts()
   const entrada = row.amountCents > 0
   const escolhido =
     row.status === 'imported'
@@ -672,6 +684,8 @@ function Linha({
               row.installment
                 ? `parcela ${row.installment.number}/${row.installment.count} · compra em ${shortDate(row.installment.purchaseDate)}`
                 : null,
+              // Quem detalhou escolheu um contato: ele precisa aparecer, ou parece perdido
+              contatos.find((contato) => contato.id === decisao.contactId)?.name ?? null,
             ]
               .filter(Boolean)
               .join(' · ')}

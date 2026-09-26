@@ -529,16 +529,15 @@ export function bankRoutes(deps: Deps) {
               } else if (decision.action === 'create') {
                 /*
                  * Detalhou a linha no formulário completo? O rascunho manda no que ele
-                 * preencheu — descrição, datas, partes. O valor e a conta continuam vindo do
-                 * banco: são eles que identificam o movimento, e mudá-los desfaria a prova.
+                 * preencheu — descrição, datas, notas, partes. O valor e a conta continuam
+                 * vindo do banco: são eles que identificam o movimento, e mudá-los desfaria a
+                 * prova. A linha segue com o texto do banco, que é o que a prova guarda.
                  */
                 const rascunho = (linha.decision as PendingDecision | null)?.draft ?? null
                 const transactionId = await criarLancamento(
                   tx,
                   contexto,
-                  rascunho
-                    ? { ...linha, description: rascunho.description || linha.description }
-                    : linha,
+                  linha,
                   decision.categoryId,
                   decision.contactId,
                   rascunho,
