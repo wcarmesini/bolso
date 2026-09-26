@@ -68,8 +68,9 @@ export function BankInbox() {
   // Na tela estreita a fila de contas rola: a escolhida vem para o meio ao trocar
   const barraDeContas = useRef<HTMLDivElement>(null)
   useEffect(() => {
+    if (!conexaoId) return
     barraDeContas.current
-      ?.querySelector('[aria-pressed="true"]')
+      ?.querySelector(`[aria-pressed="true"]`)
       ?.scrollIntoView({ inline: 'center', block: 'nearest' })
   }, [conexaoId])
 
