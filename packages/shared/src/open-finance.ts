@@ -36,6 +36,26 @@ export const isBankWorking = (status: string) =>
 export const needsAttention = (status: string) =>
   status === 'LOGIN_ERROR' || status === 'WAITING_USER_INPUT'
 
+/**
+ * O nome da conta sem repetir o do banco.
+ *
+ * Quem batiza as contas costuma escrever "Banco do Brasil - Cartão", "Banco do Brasil - CC".
+ * Numa fila com cinco conexões, o nome do banco aparece cinco vezes e o que distingue uma da
+ * outra fica no fim. Ao lado do logo do banco, o começo é redundante: fica só "Cartão", "CC".
+ */
+export function shortAccountName(connectorName: string, accountName: string) {
+  const simples = (texto: string) =>
+    texto
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .trim()
+  const banco = simples(connectorName)
+  if (!banco || !simples(accountName).startsWith(banco)) return accountName
+  const resto = accountName.slice(connectorName.length).replace(/^[\s\-–—·:|]+/, '')
+  return resto || accountName
+}
+
 /** Uma conta do banco ligada a uma conta do Bolso */
 export type BankConnection = {
   id: string

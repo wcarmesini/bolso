@@ -250,6 +250,16 @@ As regras de dinheiro moram em `packages/shared` (`cards.ts`, `allocation.ts`, `
 - **Nenhum palpite é definitivo.** Escolher "Conciliar" numa linha sem par abre a lista dos lançamentos do período — os de mesmo valor em cima, marcados, e busca por descrição ou valor. Um lançamento pertence a uma linha só: escolhê-lo aqui o solta de onde estava, sem precisar desfazer nada antes. A conta de "sem par" acompanha as escolhas na hora.
 - A tela separa o extrato em **já parecem lançados**, **novos** e **já importados antes** — cada bloco com o cabeçalho grudado no topo enquanto se rola —, e mostra à parte **o que está no Bolso e não apareceu no extrato**, que é onde aparece o valor digitado errado, a conta trocada ou a compra que o banco ainda não processou.
 
+**As contas conectadas ficam em cartões que se puxam com a mão.** Quem liga cinco contas via
+Open Finance tinha cinco botões escritos "Banco do Brasil - Cartão", "Banco do Brasil - CC"…, o
+nome do banco repetido cinco vezes empurrando para o fim justamente o que distingue uma da
+outra. Agora cada conta é um cartão com o **logo do banco**, o apelido sem o nome do banco na
+frente ("Cartão", "CC", "Poupança") e quantos lançamentos esperam nela; embaixo, a conta como o
+banco a chama ("OUROCARD INFINITE VISA ESTILO · 7152"). Quando dois bancos têm um "Cartão" cada,
+os dois voltam ao nome inteiro — o apelido curto só vale enquanto for único. A fila não mostra
+barra de rolagem: o cursor vira mãozinha e arrastar desliza (no dedo, o deslizar nativo já
+fazia isso), e um arrasto não vira clique, senão puxar a fila trocaria de conta sem querer.
+
 **A tela da conferência é uma lista para percorrer, não um formulário por linha.**
 
 - Cada linha mostra o que o banco mandou, **a categoria** (o que falta em quase toda linha nova) e **a decisão tomada**, num só controle: importar, conciliar, transferir, deixar para depois ou dispensar. O que cada decisão pede aparece embaixo dela e só nela — o par a conciliar, a outra conta da transferência. Antes, toda linha carregava os cinco botões, o seletor de par e o de categoria ao mesmo tempo, e trinta linhas viravam uma parede.

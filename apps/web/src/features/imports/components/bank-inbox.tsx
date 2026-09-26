@@ -1,11 +1,18 @@
-import { bankStatusLabel, type ImportDecision, isBankReady } from '@bolso/shared'
+import { bankStatusLabel, type ImportDecision, isBankReady, shortAccountName } from '@bolso/shared'
 import { Link } from '@tanstack/react-router'
-import { EyeOff, Inbox, Landmark, RefreshCw } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { EyeOff, Inbox, Landmark, MoreHorizontal, RefreshCw, Settings2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { DraggableRow } from '@/components/draggable-row'
 import { EmptyState } from '@/components/empty-state'
 import { Button } from '@/components/ui/button'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   useApproveBankPending,
   useBank,
@@ -57,6 +64,24 @@ export function BankInbox() {
   }, [conexoes])
 
   const conexao = conexoes.find((item) => item.id === conexaoId) ?? null
+
+  // Na tela estreita a fila de contas rola: a escolhida vem para o meio ao trocar
+  const barraDeContas = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    barraDeContas.current
+      ?.querySelector('[aria-pressed="true"]')
+      ?.scrollIntoView({ inline: 'center', block: 'nearest' })
+  }, [conexaoId])
+
+  /** Quantas contas ficariam com o mesmo apelido depois de tirar o nome do banco */
+  const nomesCurtos = useMemo(() => {
+    const contagem = new Map<string, number>()
+    for (const item of conexoes) {
+      const curto = shortAccountName(item.connectorName, item.accountName)
+      contagem.set(curto, (contagem.get(curto) ?? 0) + 1)
+    }
+    return contagem
+  }, [conexoes])
   const { data: preview, isPending: carregandoFila } = useBankPending(conexaoId)
 
   const atualizar = async () => {
@@ -134,59 +159,117 @@ export function BankInbox() {
         onOpenChange={setVendoDispensados}
       />
 
-      {/* Uma linha, como no extrato: a conferência é que tem de ocupar a tela */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {conexoes.length > 1 ? (
-          <ToggleGroup
-            variant="outline"
-            spacing={0}
-            size="sm"
-            value={conexaoId ? [conexaoId] : []}
-            onValueChange={(next) => next[0] && setConexaoId(next[0])}
-          >
-            {conexoes.map((item) => (
-              <ToggleGroupItem key={item.id} value={item.id}>
-                {item.accountName}
-                {item.pendingCount > 0 && (
-                  <span className="ml-1 rounded bg-primary/10 px-1 text-primary text-xs tabular-nums">
-                    {item.pendingCount}
+      {/*
+       * As contas conectadas, com o logo do banco na frente.
+       * O nome do banco sai do rótulo — ele já está no logo, e repetido cinco vezes empurrava
+       * para o fim justamente o que distingue uma conta da outra ("Cartão", "CC", "Poupança").
+       */}
+      {conexoes.length > 1 && (
+        <DraggableRow refDaFila={barraDeContas}>
+          {conexoes.map((item) => {
+            const atual = item.id === conexaoId
+            const curto = shortAccountName(item.connectorName, item.accountName)
+            // Dois bancos com um "Cartão" cada: aí o nome inteiro é o que distingue
+            const rotulo = nomesCurtos.get(curto) === 1 ? curto : item.accountName
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={atual}
+                onClick={() => setConexaoId(item.id)}
+                className={`flex w-52 shrink-0 flex-col gap-1 rounded-xl border p-3 text-left transition-colors ${
+                  atual
+                    ? 'border-primary/40 bg-primary/5'
+                    : 'bg-card hover:border-foreground/20 hover:bg-muted/50'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  {item.connectorImageUrl ? (
+                    <img
+                      src={item.connectorImageUrl}
+                      alt=""
+                      className="size-4 shrink-0 rounded-sm"
+                    />
+                  ) : (
+                    <Landmark className="size-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <span
+                    className={`min-w-0 flex-1 truncate text-sm ${atual ? '' : 'text-muted-foreground'}`}
+                  >
+                    {rotulo}
                   </span>
-                )}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        ) : (
-          <p className="text-sm">
-            {conexao?.connectorName}
-            <span className="text-muted-foreground"> → {conexao?.accountName}</span>
-          </p>
-        )}
+                  {item.pendingCount > 0 && (
+                    <span
+                      className={`shrink-0 rounded px-1 text-xs tabular-nums ${
+                        atual ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {item.pendingCount}
+                    </span>
+                  )}
+                </span>
+                <span className="truncate text-muted-foreground text-xs">
+                  {item.externalAccountName || item.connectorName}
+                </span>
+              </button>
+            )
+          })}
+        </DraggableRow>
+      )}
 
-        <div className="flex items-center gap-1">
-          <p className="mr-2 text-muted-foreground text-xs">
-            {conexao && !isBankReady(conexao.status)
+      {/* Que conta é esta lá no banco, quando foi buscada, e o que dá para fazer agora */}
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 truncate text-muted-foreground text-xs">
+          {[
+            conexoes.length === 1 && conexao?.connectorName,
+            conexoes.length === 1 && conexao?.externalAccountName,
+            conexao && !isBankReady(conexao.status)
               ? bankStatusLabel(conexao.status)
-              : quando(conexao?.lastSyncedAt ?? null)}
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setVendoDispensados(true)}
-          >
-            <EyeOff />
-            Dispensados
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={atualizar}
-            disabled={sincronizar.isPending}
-          >
-            <RefreshCw className={sincronizar.isPending ? 'animate-spin' : undefined} />
-            {sincronizar.isPending ? 'Buscando…' : 'Atualizar agora'}
-          </Button>
+              : quando(conexao?.lastSyncedAt ?? null),
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Buscar no banco agora"
+                  className="text-muted-foreground"
+                  onClick={atualizar}
+                  disabled={sincronizar.isPending}
+                />
+              }
+            >
+              <RefreshCw className={sincronizar.isPending ? 'animate-spin' : undefined} />
+            </TooltipTrigger>
+            <TooltipContent>
+              {sincronizar.isPending ? 'Buscando no banco…' : 'Buscar no banco agora'}
+            </TooltipContent>
+          </Tooltip>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Mais ações desta conta"
+              render={<Button variant="ghost" size="icon-sm" className="text-muted-foreground" />}
+            >
+              <MoreHorizontal />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => setVendoDispensados(true)}>
+                <EyeOff />
+                Ver dispensados
+              </DropdownMenuItem>
+              <DropdownMenuItem nativeButton={false} render={<Link to="/ajustes/integracoes" />}>
+                <Settings2 />
+                Bancos conectados
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -206,13 +289,6 @@ export function BankInbox() {
           salvando={aprovar.isPending}
           onConfirmar={confirmar}
           onGuardar={guardarDecisoes}
-          resumo={
-            <p className="text-muted-foreground text-xs">
-              {[conexao?.connectorName, conexao?.externalAccountName, conexao?.accountName]
-                .filter(Boolean)
-                .join(' · ')}
-            </p>
-          }
         />
       )}
     </>
